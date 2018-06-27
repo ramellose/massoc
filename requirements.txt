@@ -1,0 +1,10 @@
+sklearn
+argparse
+scikit-bio
+numpy
+scipy
+h5py
+networkx
+multiprocess
+biom-format
+wxPython
