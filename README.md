@@ -1,6 +1,6 @@
 # massoc
 
-A platform for inference and analysis of microbial assocaition networks.
+A platform for inference and analysis of microbial association networks.
 
 ## Getting Started
 
@@ -9,6 +9,10 @@ Simply download the repository and run the GUI through run_massoc.py, or the com
 ## Prerequisites
 
 massoc runs on Python >= 3.5. All its dependencies are listed in the requirements.txt file.
+Install them with:
+```
+pip install -r requirements.txt
+```
 
 To run network inference, you will need to ensure that your system can run your chosen network inference tools.
 Copy the CoNet files and SparCC files in the execs folder and massoc will run them for you.
@@ -27,7 +31,7 @@ Install Rscript on Ubuntu:
 ```
 sudo apt-get littler
 ```
-For Windows, add the location of Rscript.exe to PATH.
+For Windows, add the location of Rscript.exe to PATH if you cannot call Rscript from command line.
 
 The required libraries also need to be installed in your R environment:
 ```
@@ -70,6 +74,6 @@ This project is licensed under the Apache License - see the [LICENSE.md](LICENSE
 
 ## Acknowledgments
 
-massoc is largely built on and inspired by the [BIOM format](http://biom-format.org/) .
+massoc is largely built on and inspired by the [BIOM format](http://biom-format.org/).
 
 
