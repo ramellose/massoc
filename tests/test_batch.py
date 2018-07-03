@@ -18,7 +18,7 @@ __author__ = 'Lisa Rottjers'
 __maintainer__ = 'Lisa Rottjers'
 __email__ = 'lisa.rottjers@kuleuven.be'
 __status__ = 'Development'
-__license__ = 'BSD'
+__license__ = 'Apache 2.0'
 
 tabotu = '[[ 243  567  112   45   2]\n ' \
          '[ 235   56  788  232    1]\n ' \

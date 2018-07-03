@@ -6,7 +6,7 @@ These HTML text files contain a FAQ and step-by-step tutorial for running massoc
 __author__ = 'Lisa Rottjers'
 __email__ = 'lisa.rottjers@kuleuven.be'
 __status__ = 'Development'
-__license__ = 'BSD'
+__license__ = 'Apache 2.0'
 
 import os
 

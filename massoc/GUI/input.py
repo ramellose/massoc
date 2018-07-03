@@ -6,7 +6,7 @@ It shows key properties of the input files and checks for incompatibility issues
 __author__ = 'Lisa Rottjers'
 __email__ = 'lisa.rottjers@kuleuven.be'
 __status__ = 'Development'
-__license__ = 'BSD'
+__license__ = 'Apache 2.0'
 
 import wx
 import os
@@ -25,9 +25,8 @@ class InputPanel(wx.Panel):
 
         self.settings = {'biom_file': None, 'otu_table': None, 'tax_table': None, 'sample_data': None,
                          'otu_meta': None, 'cluster': None, 'split': None, 'prev': None, 'fp': None,
-                         'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar_pval': None,
-                         'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None,
-                         'min': None}
+                         'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar': None, 'spar_pval': None,
+                         'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None}
 
         self.currentDirectory = None
         self.currentDirectory = list(os.getcwd())
@@ -213,9 +212,8 @@ class InputPanel(wx.Panel):
         """
         self.settings = {'biom_file': None, 'otu_table': None, 'tax_table': None, 'sample_data': None,
                          'otu_meta': None, 'cluster': None, 'split': None, 'prev': None, 'fp': None,
-                         'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar_pval': None,
-                         'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None, 
-                         'min': None}
+                         'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar': None, 'spar_pval': None,
+                         'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None, 'min': None}
         with wx.FileDialog(self, "Open settings file", wildcard="XYZ files (*.xyz)|*.xyz",
                            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
 

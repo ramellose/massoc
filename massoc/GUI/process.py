@@ -6,7 +6,7 @@ or set a prevalence filter.
 __author__ = 'Lisa Rottjers'
 __email__ = 'lisa.rottjers@kuleuven.be'
 __status__ = 'Development'
-__license__ = 'BSD'
+__license__ = 'Apache 2.0'
 
 import wx
 from wx.lib.pubsub import pub
@@ -31,6 +31,7 @@ class ProcessPanel(wx.Panel):
         pub.subscribe(self.clear_settings_proc, 'clear_settings')
         pub.subscribe(self.load_settings_proc, 'load_settings')
         pub.subscribe(self.enable_tax, 'receive_tax')
+        pub.subscribe(self.set_settings, 'show_settings')
 
         btnsize = (300, -1)
         btnmargin = 10
@@ -69,9 +70,25 @@ class ProcessPanel(wx.Panel):
 
         # diagnostics button
 
-        self.dg_button = wx.Button(self, label='Show data properties', size=btnsize)
-        self.dg_button.Bind(wx.EVT_MOTION, self.update_help)
-        self.dg_button.Bind(wx.EVT_BUTTON, self.show_diagnostics)
+        self.dg_button = wx.StaticText(self, label='Show data properties', size=btnsize)
+        self.file_list = wx.ListBox(self, choices=['Select files first'], size=btnsize)
+        self.file_list.Bind(wx.EVT_LISTBOX, self.register_figures)
+        self.file_list.Bind(wx.EVT_MOTION, self.update_help)
+        self.file_list.SetSelection(0)
+        self.figure1 = Figure(figsize=(3,2))
+        self.prev = self.figure1.add_subplot(211)
+        self.prev.set_xlabel('Prevalence')
+        self.prev.set_title('Taxon prevalence')
+        self.prev.set_ylabel('Number of taxa')
+        self.figure1.set_tight_layout(True)
+        self.figure2 = Figure(figsize=(3,2))
+        self.rar = self.figure2.add_subplot(211)
+        self.rar.set_xlabel('Count number')
+        self.rar.set_title('Sample counts')
+        self.rar.set_ylabel('Number of samples')
+        self.figure2.set_tight_layout(True)
+        self.canvas1 = FigureCanvas(self, -1, self.figure1)
+        self.canvas2 = FigureCanvas(self, -1, self.figure2)
 
         # set minimum count
         self.min_txt = wx.StaticText(self, label='Remove taxa with mean count below:')
@@ -126,28 +143,36 @@ class ProcessPanel(wx.Panel):
         self.tax_choice.Bind(wx.EVT_CHECKLISTBOX, self.get_levels)
         self.tax_choice.Enable(False)
 
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(self.file_list, 0, wx.EXPAND | wx.ALL, 10)
+
         self.topleftsizer.Add(self.prefix_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.topleftsizer.Add(self.prefix, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.topleftsizer.AddSpacer(40)
+        self.topleftsizer.AddSpacer(10)
         self.topleftsizer.Add(self.dg_button, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.topleftsizer.Add(self.file_list, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.topleftsizer.AddSpacer(10)
+        self.topleftsizer.Add(self.canvas1, 0, wx.EXPAND | wx.ALL, 10)
+        self.topleftsizer.Add(self.canvas2, 0, wx.EXPAND | wx.ALL, 10)
         self.topleftsizer.AddSpacer(30)
-        self.topleftsizer.Add(self.min_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.topleftsizer.Add(self.min_number, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.topleftsizer.AddSpacer(30)
-        self.topleftsizer.Add(self.rar_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.topleftsizer.Add(self.rar_choice, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.topleftsizer.Add(self.rar_number, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.topleftsizer.AddSpacer(30)
-        self.topleftsizer.Add(self.prev_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.topleftsizer.Add(self.prev_val, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.topleftsizer.Add(self.prev_slider, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.topleftsizer.AddSpacer(40)
-        self.topleftsizer.Add(self.split_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.topleftsizer.Add(self.split_list, flag=wx.ALIGN_CENTER_HORIZONTAL)
 
+        self.rightsizer.Add(self.min_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.rightsizer.Add(self.min_number, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.rightsizer.AddSpacer(10)
+        self.rightsizer.Add(self.rar_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.rightsizer.Add(self.rar_choice, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.rightsizer.Add(self.rar_number, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.rightsizer.AddSpacer(10)
+        self.rightsizer.Add(self.prev_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.rightsizer.Add(self.prev_val, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.rightsizer.Add(self.prev_slider, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.rightsizer.AddSpacer(10)
+        self.rightsizer.Add(self.split_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.rightsizer.Add(self.split_list, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.rightsizer.AddSpacer(10)
         self.rightsizer.Add(self.tax_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.rightsizer.Add(self.tax_choice, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.rightsizer.AddSpacer(40)
+        self.rightsizer.AddSpacer(10)
         self.rightsizer.Add(self.cluster_btn, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.bottomleftsizer.Add(self.alg_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.bottomleftsizer.Add(self.cluster_choice, flag=wx.ALIGN_CENTER_HORIZONTAL)
@@ -161,6 +186,7 @@ class ProcessPanel(wx.Panel):
         self.topsizer.Add(self.leftsizer, 0, wx.ALL, 20)
         self.topsizer.Add(self.rightsizer, 0, wx.ALL, 20)
         self.SetSizerAndFit(self.topsizer)
+        self.Fit()
 
         # help strings for buttons
         self.buttons = {self.prev_val: 'With a prevalence filter of 20%, only taxa present in 20% of '
@@ -181,7 +207,7 @@ class ProcessPanel(wx.Panel):
                         self.min_number: 'Taxa with low mean counts can be removed if there are too many '
                                          'high-prevalence, '
                                          'low-abundance taxa.',
-                        self.dg_button: 'Show taxon prevalence and counts per sample for imported count tables.'}
+                        self.file_list: 'Show taxon prevalence and counts per sample for imported count tables.'}
 
     def update_help(self, event):
         btn = event.GetEventObject()
@@ -265,13 +291,6 @@ class ProcessPanel(wx.Panel):
         except KeyError:
             pass
         self.send_settings()
-
-    def show_diagnostics(self, event):
-        """
-        Starts diagnostics window to show prevalence + counts for imported tables.
-        """
-        dlg = Diagnostics(self.settings)
-        dlg.ShowModal()
 
     def get_levels(self, event):
         text = list()
@@ -407,44 +426,6 @@ class ProcessPanel(wx.Panel):
             for tax in msg['levels']:
                 self.tax_choice.Check(agglomdict[tax], True)
 
-class Diagnostics(wx.Dialog):
-    def __init__(self, settings):
-        """Constructor"""
-        wx.Dialog.__init__(self, None, title="Data properties")
-        filelist = list()
-        if settings['biom_file'] is not None:
-            for name in settings['biom_file']:
-                filelist.append(name)
-        if settings['otu_table'] is not None:
-            for name in settings['otu_table']:
-                filelist.append(name)
-        self.file_list = wx.ListBox(self, choices=filelist)
-        self.file_list.Bind(wx.EVT_LISTBOX, self.register_figures)
-        self.file_list.SetSelection(0)
-        self.figure1 = Figure(figsize=(3,2))
-        self.prev = self.figure1.add_subplot(211)
-        self.prev.set_xlabel('Prevalence')
-        self.prev.set_title('Histogram of taxon prevalence')
-        self.prev.set_ylabel('Number of taxa')
-        self.figure1.tight_layout()
-        self.figure2 = Figure(figsize=(3,2))
-        self.rar = self.figure2.add_subplot(211)
-        self.rar.set_xlabel('Count number')
-        self.rar.set_title('Histogram of sample counts')
-        self.rar.set_ylabel('Number of samples')
-        self.figure2.tight_layout()
-        self.canvas1 = FigureCanvas(self, -1, self.figure1)
-        self.canvas2 = FigureCanvas(self, -1, self.figure2)
-
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(self.file_list, 0, wx.EXPAND | wx.ALL, 10)
-        sizer.AddSpacer(10)
-        sizer.Add(self.canvas1, 0, wx.EXPAND | wx.ALL, 10)
-        sizer.Add(self.canvas2, 0, wx.EXPAND | wx.ALL, 10)
-        self.SetSizer(sizer)
-        self.Fit()
-        self.generate_figures()
-
     def register_figures(self, event):
         """Registers listbox event and calls generate_figures."""
         self.generate_figures()
@@ -464,6 +445,25 @@ class Diagnostics(wx.Dialog):
         self.rar.hist(sample_sums, bins=40)
         self.canvas1.draw()
         self.canvas2.draw()
+
+    def set_settings(self, msg):
+        """
+        Stores settings file as tab property so it can be read by save_settings.
+        """
+        filelist = list()
+        self.settings = msg
+        if self.settings['biom_file'] is not None:
+            for name in self.settings['biom_file']:
+                filelist.append(name)
+        if self.settings['otu_table'] is not None:
+            for name in self.settings['otu_table']:
+                filelist.append(name)
+        if len(filelist) > 0:
+            self.file_list.Set(filelist)
+            self.file_list.SetSelection(0)
+            self.generate_figures()
+
+
 
 
 

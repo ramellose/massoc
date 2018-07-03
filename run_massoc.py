@@ -14,11 +14,9 @@ Right now, the R scripts keep running even if you quit running massoc.
 __author__ = 'Lisa Rottjers'
 __email__ = 'lisa.rottjers@kuleuven.be'
 __status__ = 'Development'
-__license__ = 'BSD'
+__license__ = 'Apache 2.0'
 
 import wx
-import os
-import massoc
 from wx.lib.pubsub import pub
 from massoc.GUI.intro import IntroPanel
 from massoc.GUI.input import InputPanel
@@ -31,7 +29,7 @@ class BuildFrame(wx.Frame):
     def __init__(self):
         wx.Frame.__init__(self, None, title='massoc', size=(750, 700))
 
-        ico = wx.Icon('massoc.png', wx.BITMAP_TYPE_PNG)
+        ico = wx.Icon("massoc.png", wx.BITMAP_TYPE_PNG)
         self.SetIcon(ico)
 
         p = wx.Panel(self)
@@ -48,8 +46,8 @@ class BuildFrame(wx.Frame):
 
         self.settings = {'biom_file': None, 'otu_table': None, 'tax_table': None, 'sample_data': None,
                          'otu_meta': None, 'cluster': None, 'split': None, 'prev': None, 'fp': None,
-                         'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar_pval': None,
-                         'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None}
+                         'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar': None, 'spar_pval': None,
+                         'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None, 'min': None}
 
         sizer = wx.BoxSizer()
         sizer.Add(nb, 1, wx.EXPAND)
@@ -70,8 +68,6 @@ class BuildFrame(wx.Frame):
                 self.settings[key] = msg[key]
         except:
             pass
-        if key in msg is 'cluster':
-            self.settings['nclust'] = ['4']
         pub.sendMessage('show_settings', msg=self.settings)
 
     def change_statusbar(self, msg):

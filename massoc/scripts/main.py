@@ -11,7 +11,7 @@ __author__ = 'Lisa Rottjers'
 __maintainer__ = 'Lisa Rottjers'
 __email__ = 'lisa.rottjers@kuleuven.be'
 __status__ = 'Development'
-__license__ = 'BSD'
+__license__ = 'Apache 2.0'
 
 import argparse
 import sys
@@ -139,15 +139,25 @@ def get_input(argv):
                         choices=['spiec-easi', 'sparcc', 'conet'],
                         help='Runs all listed tools with default settings.',
                         default=None)
-    parser.add_argument('-spiec', '--SPIEC-EASI',
-                        dest='spiec',
+    parser.add_argument('-spiec_settings', '--SPIEC-EASI_settings',
+                        dest='spiec_settings',
                         required=False,
                         help='Location of SPIEC-EASI settings file. ',
                         default=None)
-    parser.add_argument('-conet', '--CoNet',
-                        dest='conet',
+    parser.add_argument('-conet_settings', '--CoNet_settings',
+                        dest='conet_settings',
                         required=False,
                         help='Location of CoNet settings file. ',
+                        default=None)
+    parser.add_argument('-spar', '--SparCC_executable',
+                        dest='spar',
+                        required=False,
+                        help='Location of SparCC folder (not the .py file)',
+                        default=None)
+    parser.add_argument('-conet', '--CoNet_executable',
+                        dest='conet_settings',
+                        required=False,
+                        help='Location of CoNet3 folder',
                         default=None)
     parser.add_argument('-spar_pval', '--SparCC_pval',
                         dest='spar_pval',

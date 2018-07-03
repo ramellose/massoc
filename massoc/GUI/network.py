@@ -6,7 +6,7 @@ It also provides an overview of current settings, and can execute massoc with th
 __author__ = 'Lisa Rottjers'
 __email__ = 'lisa.rottjers@kuleuven.be'
 __status__ = 'Development'
-__license__ = 'BSD'
+__license__ = 'Apache 2.0'
 
 import os
 from threading import Thread
@@ -38,13 +38,14 @@ class NetworkPanel(wx.Panel):
         self.spar_boot = None
         self.spar_pval = None
         self.cores = None
+        self.conet = None
+        self.spar = None
 
         # while mainframe contains the main settings file, the NetworkPanel also needs it to generate a command call
         self.settings = {'biom_file': None, 'otu_table': None, 'tax_table': None, 'sample_data': None,
-                         'otu_meta': None, 'cluster': None, 'split': None, 'prev': None,
-                         'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar_pval': None,
-                         'spar_boot': None, 'name': None, 'nclust': None, 'fp': None, 'cores': None, 'rar': None,
-                         'min': None}
+                         'otu_meta': None, 'cluster': None, 'split': None, 'prev': None, 'fp': None,
+                         'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar': None, 'spar_pval': None,
+                         'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None, 'min': None}
 
         pub.subscribe(self.review_settings, 'show_settings')
         pub.subscribe(self.format_settings, 'update_settings')
@@ -68,6 +69,18 @@ class NetworkPanel(wx.Panel):
         self.tool_box.Bind(wx.EVT_MOTION, self.update_help)
         self.tool_box.Bind(wx.EVT_CHECKLISTBOX, self.list_tools)
 
+        # select CoNet.jar
+        self.conet_button = wx.Button(self, label="Select CoNet3 folder", size=btnsize)
+        self.conet_button.Bind(wx.EVT_BUTTON, self.open_conet)
+        self.conet_button.Bind(wx.EVT_MOTION, self.update_help)
+        self.conet_txt = wx.TextCtrl(self, size=btnsize)
+
+        # select SparCC folder
+        self.spar_button = wx.Button(self, label="Select SparCC folder", size=btnsize)
+        self.spar_button.Bind(wx.EVT_BUTTON, self.open_spar)
+        self.spar_button.Bind(wx.EVT_MOTION, self.update_help)
+        self.spar_txt = wx.TextCtrl(self, size=btnsize)
+
         # show & adjust tool settings
         self.settings_txt = wx.StaticText(self, label="Change settings for: ")
         self.settings_choice = wx.ListBox(self, choices=['SparCC', 'CoNet', 'SPIEC-EASI'], size=boxsize)
@@ -89,12 +102,12 @@ class NetworkPanel(wx.Panel):
 
         # CoNet settings
         self.conetbox = wx.BoxSizer(wx.VERTICAL)
-        self.conet_txt = wx.StaticText(self, label='To adjust CoNet settings, replace the CoNet BASH call \n'
+        self.conet_sets = wx.StaticText(self, label='To adjust CoNet settings, replace the CoNet BASH call \n'
                                                    'in this file by new ones generated with the original \n'
                                                    'CoNet application. ')
         self.conet_file = wx.GenericDirCtrl(self, dir=(os.path.dirname(massoc.__file__) + '\\execs\\CoNet.sh'),
                                             size=(boxsize[0], 300))
-        self.conetbox.Add(self.conet_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.conetbox.Add(self.conet_sets, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.conetbox.AddSpacer(5)
         self.conetbox.Add(self.conet_file, flag=wx.ALIGN_LEFT)
         self.conetbox.ShowItems(show=False)
@@ -147,6 +160,12 @@ class NetworkPanel(wx.Panel):
         self.topleftsizer.AddSpacer(5)
         self.topleftsizer.Add(self.tool_box, flag=wx.ALIGN_LEFT)
         self.topleftsizer.AddSpacer(40)
+        self.topleftsizer.Add(self.conet_button, flag=wx.ALIGN_LEFT)
+        self.topleftsizer.Add(self.conet_txt, flag=wx.ALIGN_LEFT)
+        self.topleftsizer.AddSpacer(5)
+        self.topleftsizer.Add(self.spar_button, flag=wx.ALIGN_LEFT)
+        self.topleftsizer.Add(self.spar_txt, flag=wx.ALIGN_LEFT)
+        self.topleftsizer.AddSpacer(40)
         self.topleftsizer.Add(self.settings_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.topleftsizer.Add(self.settings_choice, flag=wx.ALIGN_CENTER_HORIZONTAL)
 
@@ -164,7 +183,9 @@ class NetworkPanel(wx.Panel):
         # help strings for buttons
         self.buttons = {self.tool_box: 'Run SparCC, CoNet or SPIEC-EASI. Check the help files for more information.',
                         self.call: 'Generate a command line call to run this pipeline.',
-                        self.jobs_choice: 'Distributing jobs over multiple processes = lower runtime.'}
+                        self.jobs_choice: 'Distributing jobs over multiple processes = lower runtime.',
+                        self.conet_button: 'Select the location of your CoNet.jar file. ',
+                        self.spar_button: 'Select the location of your SparCC folder. '}
 
     def update_help(self, event):
         btn = event.GetEventObject()
@@ -187,6 +208,27 @@ class NetworkPanel(wx.Panel):
             self.conetbox.ShowItems(show=False)
             self.spiecbox.ShowItems(show=True)
         self.Layout()
+
+    def open_conet(self, event):
+        """
+        Create file dialog and show it.
+        """
+        dlg = wx.DirDialog(self, "Select CoNet3 directory", style=wx.DD_DEFAULT_STYLE)
+        if dlg.ShowModal() == wx.ID_OK:
+            self.conet = list()
+            self.conet.append(dlg.GetPath())
+        self.conet_txt.SetValue(self.conet[0])
+        self.send_settings()
+        dlg.Destroy()
+
+    def open_spar(self, event):
+        dlg = wx.DirDialog(self, "Select SparCC directory", style=wx.DD_DEFAULT_STYLE)
+        if dlg.ShowModal() == wx.ID_OK:
+            self.spar = list()
+            self.spar.append(dlg.GetPath())
+        self.spar_txt.SetValue(self.spar[0])
+        self.send_settings()
+        dlg.Destroy()
 
     def list_tools(self, event):
         text = list(self.tool_box.GetCheckedStrings())
@@ -248,8 +290,8 @@ class NetworkPanel(wx.Panel):
         command_dict = {'biom_file': '-biom', 'otu_table': '-otu', 'tax_table': '-tax', 'sample_data': '-s',
                         'otu_meta': '-od', 'cluster': '-cl', 'split': '-split', 'nclust': '-nclust', 'cores': '-cores',
                         'prev': '-prev', 'fp': '-o', 'levels': '-levels', 'tools': '-tools', 'spiec': '-spiec',
-                        'conet': '-conet', 'spar_pval': '-spar_pval', 'spar_boot': '-spar_boot', 'name': '-n',
-                        'rar': '-rar', 'min': '-min'}
+                        'conet': '-conet', 'spar': 'spar', 'spar_pval': '-spar_pval', 'spar_boot': '-spar_boot',
+                        'name': '-n', 'rar': '-rar', 'min': '-min'}
         for i in command_dict:
             if self.settings[i] is not None:
                 if len(self.settings[i]) > 0:
@@ -280,7 +322,8 @@ class NetworkPanel(wx.Panel):
                         'nclust': 'Maximum number of clusters to evaluate:',
                         'prev': 'Prevalence filter:', 'levels': 'Taxonomic levels:',
                         'tools': 'Network inference tools to run:', 'spiec': 'Settings for SPIEC-EASI:',
-                        'conet': 'Settings for CoNet:', 'spar_pval': 'SparCC p-value:',
+                        'conet': 'Location of CoNet executable:', 'spar': 'Location of SparCC folder',
+                        'spar_pval': 'SparCC p-value:',
                         'spar_boot': 'SparCC bootstrap number:', 'name': 'Prefix for output files:',
                         'fp': 'Location for output files:', 'cores': 'Number of processes:', 'rar': 'Rarefaction:',
                         'min': 'Minimal mean count:'}
@@ -303,7 +346,7 @@ class NetworkPanel(wx.Panel):
         Publisher function for settings
         """
         settings = {'tools': self.tools, 'spar_pval': self.spar_pval, 'spar_boot': self.spar_boot,
-                    'cores': self.cores}
+                    'cores': self.cores, 'spar': self.spar, 'conet': self.conet}
         pub.sendMessage('update_settings', msg=settings)
 
     def format_settings(self, msg):
@@ -343,10 +386,10 @@ class NetworkPanel(wx.Panel):
 
             self.spiec_star.SetValue("50")
             self.settings = {'biom_file': None, 'otu_table': None, 'tax_table': None, 'sample_data': None,
-                             'otu_meta': None, 'cluster': None, 'split': None, 'prev': None,
-                             'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar_pval': None,
-                             'spar_boot': None, 'name': None, 'nclust': None, 'fp': None, 'cores': None, 'rar': None,
-                             'min': None}
+                             'otu_meta': None, 'cluster': None, 'split': None, 'prev': None, 'fp': None,
+                             'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar': None,
+                             'spar_pval': None, 'min': None,
+                             'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None}
             self.send_settings()
 
     def load_settings_net(self, msg):

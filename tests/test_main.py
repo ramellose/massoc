@@ -6,7 +6,7 @@ __author__ = 'Lisa Rottjers'
 __maintainer__ = 'Lisa Rottjers'
 __email__ = 'lisa.rottjers@kuleuven.be'
 __status__ = 'Development'
-__license__ = 'BSD'
+__license__ = 'Apache 2.0'
 
 import os
 import random

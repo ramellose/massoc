@@ -37,7 +37,7 @@ inputs : dictionary
 __author__ = 'Lisa Rottjers'
 __email__ = 'lisa.rottjers@kuleuven.be'
 __status__ = 'Development'
-__license__ = 'BSD'
+__license__ = 'Apache 2.0'
 
 import ast
 import csv
@@ -158,9 +158,9 @@ class Nets(Batch):
         Runs python 2.7 SparCC code.
         """
         path = list()
-        path.append(os.path.dirname(massoc.__file__) + '\\execs\\SparCC\\SparCC.py')
-        path.append(os.path.dirname(massoc.__file__) + '\\execs\\SparCC\\MakeBootstraps.py')
-        path.append(os.path.dirname(massoc.__file__) + '\\execs\\SparCC\\PseudoPvals.py')
+        path.append(self.inputs['spar'][0] + '\\SparCC.py')
+        path.append(self.inputs['spar'][0] + '\\MakeBootstraps.py')
+        path.append(self.inputs['spar'][0] + '\\PseudoPvals.py')
         path = [x.replace('\\', '/') for x in path]
         filenames = self.get_filenames()
         self.log['SparCC_start'] = datetime.now().strftime('%B %d %Y %H:%M:%S')
@@ -223,7 +223,7 @@ class Nets(Batch):
             path = settings[0]
             if path[-2:] is not 'sh':
                 raise ValueError("Please supply an edited Shell script to run CoNet.")
-        libpath = os.path.dirname(massoc.__file__) + '\\execs\\CoNet3\\lib\\CoNet.jar'
+        libpath = self.inputs['conet'][0] + '\\lib\\CoNet.jar'
         libpath = libpath.replace('\\', '/')
         filenames = self.get_filenames()
         fn = '\n'.join("{!s}={!r}".format(key, val) for (key, val) in filenames.items())
@@ -309,21 +309,6 @@ class Nets(Batch):
         for network in self.networks:
             path = self.inputs['fp'][0] + '/' + network + '.xml'
             networkx.write_gml(G=self.networks[network], path=path)
-
-    def write_hdf5(self):
-        """
-        HDF5 version of BIOM format needs to be written to disk first.
-        Writes adapted version of BIOM format HDF5 file to disk
-        for each network.
-        """
-        for name in self.networks:
-            subnames = name.split(sep='_')
-            biomname = self.inputs['fp'][0] + '/' + '_'.join(subnames[:-1]) + '.hdf5'
-            biomfile = biom.load_table(biomname)
-            sparse_edge_table = networkx.to_scipy_sparse_matrix(G=self.networks[name])
-            biomfile.edge_data = sparse_edge_table
-            biomfile.network_log = self.log
-            # dump adjusted biomfile; modify biomfile table.to_hdf5 function
 
 
 def _add_tax(network, file):
