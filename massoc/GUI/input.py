@@ -14,6 +14,12 @@ from wx.lib.pubsub import pub
 import biom
 from biom.cli.metadata_adder import _add_metadata
 from biom.exception import BiomParseException
+import massoc
+
+import logging
+import logging.handlers as handlers
+logger = logging.getLogger()
+logger.setLevel(logging.WARNING)
 
 class InputPanel(wx.Panel):
     def __init__(self, parent):
@@ -241,6 +247,7 @@ class InputPanel(wx.Panel):
                 file.close()
             except IOError:
                 wx.LogError("Cannot open file '%s'." % pathname)
+                logger.error("Cannot open file", exc_info=True)
         self.currentDirectory = self.settings['fp']
         self.dir_txt.SetValue(self.settings['fp'][0])
         self.biom_file = self.settings['biom_file']
@@ -292,6 +299,7 @@ class InputPanel(wx.Panel):
                 file.close()
             except IOError:
                 wx.LogError("Cannot save current data in file '%s'." % pathname)
+                logger.error("Cannot save current data in file", exc_info=True)
 
     def show_dialog(self, event):
         """
@@ -369,7 +377,8 @@ class InputPanel(wx.Panel):
                     self.checks += "This table contains " + str(biomdims[0]) + " taxa and " + str(biomdims[1]) +\
                                    " samples. \n\n"
                 except(TypeError, BiomParseException):
-                    raise TypeError(str(x) + ' does not appear to be a BIOM-compatible table!')
+                    wx.LogError("Cannot parse biom file '%s'." % x)
+                    logger.error("Cannot parse biom file", exc_info=True)
         if filetype is 'biom':
             for x in self.biom_file:
                 try:
@@ -391,7 +400,8 @@ class InputPanel(wx.Panel):
                         self.checks += "This BIOM file contains taxonomy data."
                         pub.sendMessage('receive_tax', msg='added_tax')
                 except(TypeError, BiomParseException):
-                    raise TypeError(str(x) + ' does not appear to be a BIOM-compatible table!')
+                    wx.LogError(str(x) + ' does not appear to be a BIOM-compatible table!')
+                    logger.error(str(x) + ' does not appear to be a BIOM-compatible table!', exc_info=True)
         if filetype is 'tax':
             for x, z in zip(self.count_file, self.tax_file):
                 try:
@@ -402,7 +412,8 @@ class InputPanel(wx.Panel):
                     tax.close()
                     pub.sendMessage('receive_tax', msg='added_tax')
                 except(TypeError, ValueError, BiomParseException):
-                    raise TypeError(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!')
+                    wx.LogError(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!')
+                    logger.error(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!', exc_info=True)
         if filetype is 'meta':
             # this is not working yet, apparently the metadata file can't be read to the biomfile
             for x, z in zip(self.count_file, self.sample_file):
@@ -423,5 +434,6 @@ class InputPanel(wx.Panel):
                     meta.close()
                     pub.sendMessage('receive_metadata', msg=varlist)
                 except(TypeError, ValueError, BiomParseException):
-                    raise TypeError(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!')
+                    wx.LogError(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!')
+                    logger.error(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!', exc_info=True)
         self.summ_box.SetValue(self.checks)

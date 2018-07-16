@@ -37,7 +37,12 @@ from sklearn.cluster import KMeans, DBSCAN, SpectralClustering, AffinityPropagat
 from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
-from scipy.sparse import csr_matrix
+import os
+import massoc
+import logging
+import logging.handlers as handlers
+logger = logging.getLogger()
+logger.setLevel(logging.WARNING)
 
 class Batch(object):
 
@@ -105,7 +110,7 @@ class Batch(object):
             self.log['Collaped_tax'] = datetime.now().strftime('%B %d %Y %H:%M:%S')
             self.write_bioms()
         except TypeError:
-            print("Collapsing did not work; did you already collapse?")
+            logger.error("Could not collapse taxonomy", exc_info=True)
 
     def summary(self):
         """
@@ -123,7 +128,10 @@ class Batch(object):
         """
         for x in self.inputs['name']:
             filename = self.inputs['fp'][0] + '/' + x + '_otu.hdf5'
-            write_biom_table(self.otu[x], fmt, filename)
+            try:
+                write_biom_table(self.otu[x], fmt, filename)
+            except Exception:
+                logger.error("Cannot write " + str(x) + " to disk", exc_info=True)
             if len(self.genus) != 0:
                 filename = self.inputs['fp'][0] + '/' + x + '_species.hdf5'
                 write_biom_table(self.species[x + '_species'], fmt, filename)
@@ -147,21 +155,24 @@ class Batch(object):
         so the original file is not modified.
         """
         batchcopy = copy.deepcopy(self)
-        for x in list(self.otu):
-            # normalizes the data by samples
-            normbiom = batchcopy.otu[x].norm(axis='sample', inplace=False)
-            mat = csr_matrix.toarray(normbiom.matrix_data)
-            # replaces all zeros with a small value
-            # multiplicative replacement preserves ratios between values
-            mat = multiplicative_replacement(mat)
-            if mode is 'clr':
-                mat = clr(mat)
-            elif mode is 'ilr':
-                mat = ilr(mat)
-            else:
-                raise ValueError("Only CLR and ILR transformations are currently supported.")
-            normbiom._data = csc_matrix(mat)
-            batchcopy.otu[x] = normbiom
+        try:
+            for x in list(self.otu):
+                # normalizes the data by samples
+                normbiom = batchcopy.otu[x].norm(axis='sample', inplace=False)
+                mat = csr_matrix.toarray(normbiom.matrix_data)
+                # replaces all zeros with a small value
+                # multiplicative replacement preserves ratios between values
+                mat = multiplicative_replacement(mat)
+                if mode is 'clr':
+                    mat = clr(mat)
+                elif mode is 'ilr':
+                    mat = ilr(mat)
+                else:
+                    raise ValueError("Only CLR and ILR transformations are currently supported.")
+                normbiom._data = csc_matrix(mat)
+                batchcopy.otu[x] = normbiom
+        except Exception:
+            logger.error("Failed to normalize data", exc_info=True)
         return batchcopy
 
     def prev_filter(self, mode='prev'):
@@ -178,46 +189,55 @@ class Batch(object):
             data = csr_matrix.todense(data)
             keep_otus = list()
             binotu = None
-            if mode is 'prev':  # calculates prevalence
-                fracs = np.count_nonzero(data, axis=1)
-                nsamples = data.shape[1]
-                fracs = fracs / nsamples
-                for y in range(0, len(fracs)):
-                    if fracs[y] >= (float(self.inputs['prev'][0])/100):
-                        keep_otus.append(self.otu[x]._observation_ids[y])
-                    else:
-                        binotu = self.otu[x]._observation_ids[y]
-                if binotu is not None and 'Bin' not in keep_otus:
-                    keep_otus.append(binotu)
-                self.log['Prevalence_filter'] = self.inputs['prev'][0] + "% at " + \
-                    datetime.now().strftime('%B %d %Y %H:%M:%S')
-            if mode is 'min':
-                mincount = np.sum(data, axis=1)
-                for y in range(0, len(mincount)):
-                    if mincount[y] >= (int(self.inputs['min'][0])):
-                        keep_otus.append(self.otu[x]._observation_ids[y])
-                    else:
-                        binotu = self.otu[x]._observation_ids[y]
-                if binotu is not None:
-                    keep_otus.append(binotu)
-                self.log['Abundance_filter'] = self.inputs['min'][0] + " counts at " + \
-                                               datetime.now().strftime('%B %d %Y %H:%M:%S')
+            try:
+                if mode is 'prev':  # calculates prevalence
+                    fracs = np.count_nonzero(data, axis=1)
+                    nsamples = data.shape[1]
+                    fracs = fracs / nsamples
+                    for y in range(0, len(fracs)):
+                        if fracs[y] >= (float(self.inputs['prev'][0])/100):
+                            keep_otus.append(self.otu[x]._observation_ids[y])
+                        else:
+                            binotu = self.otu[x]._observation_ids[y]
+                    if binotu is not None and 'Bin' not in keep_otus:
+                        keep_otus.append(binotu)
+                    self.log['Prevalence_filter'] = self.inputs['prev'][0] + "% at " + \
+                        datetime.now().strftime('%B %d %Y %H:%M:%S')
+            except Exception:
+                logger.error("Could not set prevalence filter", exc_info=True)
+            try:
+                if mode is 'min':
+                    mincount = np.sum(data, axis=1)
+                    for y in range(0, len(mincount)):
+                        if mincount[y] >= (int(self.inputs['min'][0])):
+                            keep_otus.append(self.otu[x]._observation_ids[y])
+                        else:
+                            binotu = self.otu[x]._observation_ids[y]
+                    if binotu is not None:
+                        keep_otus.append(binotu)
+                    self.log['Abundance_filter'] = self.inputs['min'][0] + " counts at " + \
+                                                   datetime.now().strftime('%B %d %Y %H:%M:%S')
+            except Exception:
+                logger.error("Could not set a minimum count filter", exc_info=True)
             keep = self.otu[x].filter(keep_otus, axis="observation", inplace=False)
-            if binotu is not None:
-                bin = self.otu[x].filter(keep_otus[:-1], axis="observation", inplace=False, invert=True)
-                data = bin.matrix_data
-                data = csr_matrix.todense(data)
-                binsums = np.sum(data, axis=0) # sums all binned OTUs
-                if 'Bin' not in keep_otus:
-                    bin_id = keep._obs_index[binotu]
-                    keep._data[bin_id] = binsums
-                    keep._observation_ids[bin_id] = "Bin"
-                    keep._obs_index["Bin"] = keep._obs_index.pop(binotu)
-                if 'Bin' in keep_otus:  # necessary to prevent duplicate Bin ID
-                    old_bin_id = keep._obs_index["Bin"]
-                    old_bin_sums = keep._data[old_bin_id]
-                    new_bin_sums = binsums + old_bin_sums
-                    keep._data[old_bin_id] = new_bin_sums
+            try:
+                if binotu is not None:
+                    bin = self.otu[x].filter(keep_otus[:-1], axis="observation", inplace=False, invert=True)
+                    data = bin.matrix_data
+                    data = csr_matrix.todense(data)
+                    binsums = np.sum(data, axis=0) # sums all binned OTUs
+                    if 'Bin' not in keep_otus:
+                        bin_id = keep._obs_index[binotu]
+                        keep._data[bin_id] = binsums
+                        keep._observation_ids[bin_id] = "Bin"
+                        keep._obs_index["Bin"] = keep._obs_index.pop(binotu)
+                    if 'Bin' in keep_otus:  # necessary to prevent duplicate Bin ID
+                        old_bin_id = keep._obs_index["Bin"]
+                        old_bin_sums = keep._data[old_bin_id]
+                        new_bin_sums = binsums + old_bin_sums
+                        keep._data[old_bin_id] = new_bin_sums
+            except Exception:
+                logger.error("Could not preserve binned taxa", exc_info=True)
             self.otu[x] = keep
         if len(self.genus) > 0:
             self.collapse_tax()
@@ -232,23 +252,26 @@ class Batch(object):
         """
         batchcopy = deepcopy(self)
         for x in list(self.otu):
-            if self.inputs['rar'][0] == 'True':
-                lowest_count = int(min(self.otu[x].sum(axis='sample')))
-            else:
+            try:
+                if self.inputs['rar'][0] == 'True':
+                    lowest_count = int(min(self.otu[x].sum(axis='sample')))
+                else:
+                    lowest_count = int(self.inputs['rar'][0])
                 data = self.otu[x].matrix_data
                 data = csr_matrix.todense(data)
                 keep_samples = list()
-                lowest_count = int(self.inputs['rar'][0])
                 mincount = np.sum(data, axis=0)
                 for y in range(mincount.shape[1]):
                     if mincount.item(y) >= lowest_count:
                         keep_samples.append(self.otu[x]._sample_ids[y])
                 keep = self.otu[x].filter(keep_samples, axis="sample", inplace=False)
-            batchcopy.otu[x] = keep.subsample(n=lowest_count, axis='sample')
-            self.log['Rarefaction'] = str(lowest_count) + " counts at " +\
-                                      datetime.now().strftime('%B %d %Y %H:%M:%S')
-        for x in list(self.otu):
-            self.otu[x] = batchcopy.otu[x]
+                batchcopy.otu[x] = keep.subsample(n=lowest_count, axis='sample')
+                self.log['Rarefaction'] = str(lowest_count) + " counts at " +\
+                                          datetime.now().strftime('%B %d %Y %H:%M:%S')
+            except Exception:
+                logger.error("Unable to rarefy file", exc_info=True)
+            for x in list(self.otu):
+                self.otu[x] = batchcopy.otu[x]
 
     def split_biom(self, mode="sample", *args):
         """
@@ -263,14 +286,17 @@ class Batch(object):
         if type(self.otu) is not dict:
             raise ValueError("Split_biom requires a dictionary of biom files to be supplied.")
         for x in list(self.otu):
-            biomtab = new_dict[x]
-            if inputs['split'][0] not in biomtab._sample_metadata[1]:
-                if inputs['split'][0] is not 'TRUE':
-                    raise ValueError("Sample metadata does not contain this header!")
-            new_tables = biomtab.partition(part_f, axis='sample')
-            for new in new_tables:
-                key = x + '_' + new[0]
-                new_dict[key] = new[1]
+            try:
+                biomtab = new_dict[x]
+                if inputs['split'][0] not in biomtab._sample_metadata[1]:
+                    if inputs['split'][0] is not 'TRUE':
+                        raise ValueError("Sample metadata does not contain this header!")
+                new_tables = biomtab.partition(part_f, axis='sample')
+                for new in new_tables:
+                    key = x + '_' + new[0]
+                    new_dict[key] = new[1]
+            except Exception:
+                logger.error("Failed to split files", exc_info=True)
         self.otu = new_dict
         self.log['Split_variables'] = inputs['split'][0] + " at " +\
                                       datetime.now().strftime('%B %d %Y %H:%M:%S') + "\n"
@@ -297,65 +323,69 @@ class Batch(object):
             raise ValueError("Cluster_biom requires a dictionary of biom files to be supplied.")
         normbatch = self.normalize_transform(mode='clr')
         for x in list(self.otu):
-            # define topscore and bestcluster for no cluster
-            norm_table = normbatch.otu[x]
-            topscore = 0
-            bestcluster = [1] * len(norm_table.ids())
-            data = csr_matrix.todense(norm_table.matrix_data)
-            data = np.matrix.transpose(data)
-            data = PCA(n_components=2).fit_transform(data)
-            # CLR transform places data in Euclidean space
-            randomclust = np.random.randint(2, size=len(data))
-            sh_score = [silhouette_score(data, randomclust)]
-            # K-means clustering, tests 2-4 clusters
-            if inputs['cluster'][0] == 'K-means':
-                for i in nums:
-                    clusters = KMeans(i).fit_predict(data)
-                    silhouette_avg = silhouette_score(data, clusters)
-                    sh_score.append(silhouette_avg)
-                topscore = int(np.argmax(sh_score) + 1)
-                bestcluster = KMeans(topscore).fit_predict(data)
-            # DBSCAN clustering, automatically finds optimal cluster size
-            if inputs['cluster'][0] == 'DBSCAN':
-                bestcluster = DBSCAN().fit_predict(data)
-                topscore = len(set(bestcluster)) - (1 if -1 in bestcluster else 0)
-            # Gaussian Mixture Model (gmm) probability distribution
-            if inputs['cluster'][0] == 'Gaussian':
-                for i in nums:
-                    fit = GaussianMixture(i).fit(data)
-                    clusters = fit.predict(data)
-                    silhouette_avg = silhouette_score(data, clusters)
-                    sh_score.append(silhouette_avg)
-                topscore = int(np.argmax(sh_score) + 1)
-                bestfit = GaussianMixture(topscore).fit(data)
-                bestcluster = bestfit.predict(data)
-            # Spectral Clustering
-            if inputs['cluster'][0] == 'Spectral':
-                for i in nums:
-                    clusters = SpectralClustering(i).fit_predict(data)
-                    silhouette_avg = silhouette_score(data, clusters)
-                    sh_score.append(silhouette_avg)
-                topscore = int(np.argmax(sh_score) + 1)
-                bestcluster = SpectralClustering(topscore).fit_predict(data)
-            # Affinity Propagation clustering
-            if inputs['cluster'] == 'Affinity':
-                bestcluster = AffinityPropagation().fit_predict(data)
-                topscore = len(set(bestcluster)) - (1 if -1 in bestcluster else 0)
-            if max(sh_score) < 0.25:
-                raise ValueError("Silhouette score too low: please try a different algorithm. "
-                                 "Your data may not be suitable for clustering.")
-            new_dict[x] = deepcopy(self.otu[x])
-            for i in range(topscore):
-                mask, = np.where(bestcluster == i)
-                for j in mask:
-                    new_dict[x]._sample_metadata[j]['cluster'] = inputs['cluster'][0] + '_' + str(i)
-            self.otu = new_dict
-            self.log['Cluster'] = str(topscore) + " clusters with " + inputs['cluster'][0] + " at " + \
-                                  datetime.now().strftime('%B %d %Y %H:%M:%S')
-            if inputs['split'] is not None:
-                if inputs['split'][0] == 'TRUE':
-                    inputs['split'][0] = 'cluster'
-                    self.split_biom()
+            try:
+                # define topscore and bestcluster for no cluster
+                norm_table = normbatch.otu[x]
+                topscore = 0
+                bestcluster = [1] * len(norm_table.ids())
+                data = csr_matrix.todense(norm_table.matrix_data)
+                data = np.matrix.transpose(data)
+                data = PCA(n_components=2).fit_transform(data)
+                # CLR transform places data in Euclidean space
+                randomclust = np.random.randint(2, size=len(data))
+                sh_score = [silhouette_score(data, randomclust)]
+                # K-means clustering, tests 2-4 clusters
+                if inputs['cluster'][0] == 'K-means':
+                    for i in nums:
+                        clusters = KMeans(i).fit_predict(data)
+                        silhouette_avg = silhouette_score(data, clusters)
+                        sh_score.append(silhouette_avg)
+                    topscore = int(np.argmax(sh_score) + 1)
+                    bestcluster = KMeans(topscore).fit_predict(data)
+                # DBSCAN clustering, automatically finds optimal cluster size
+                if inputs['cluster'][0] == 'DBSCAN':
+                    bestcluster = DBSCAN().fit_predict(data)
+                    topscore = len(set(bestcluster)) - (1 if -1 in bestcluster else 0)
+                # Gaussian Mixture Model (gmm) probability distribution
+                if inputs['cluster'][0] == 'Gaussian':
+                    for i in nums:
+                        fit = GaussianMixture(i).fit(data)
+                        clusters = fit.predict(data)
+                        silhouette_avg = silhouette_score(data, clusters)
+                        sh_score.append(silhouette_avg)
+                    topscore = int(np.argmax(sh_score) + 1)
+                    bestfit = GaussianMixture(topscore).fit(data)
+                    bestcluster = bestfit.predict(data)
+                # Spectral Clustering
+                if inputs['cluster'][0] == 'Spectral':
+                    for i in nums:
+                        clusters = SpectralClustering(i).fit_predict(data)
+                        silhouette_avg = silhouette_score(data, clusters)
+                        sh_score.append(silhouette_avg)
+                    topscore = int(np.argmax(sh_score) + 1)
+                    bestcluster = SpectralClustering(topscore).fit_predict(data)
+                # Affinity Propagation clustering
+                if inputs['cluster'] == 'Affinity':
+                    bestcluster = AffinityPropagation().fit_predict(data)
+                    topscore = len(set(bestcluster)) - (1 if -1 in bestcluster else 0)
+                if max(sh_score) < 0.25:
+                    raise ValueError("Silhouette score too low: please try a different algorithm. "
+                                     "Your data may not be suitable for clustering.")
+                new_dict[x] = deepcopy(self.otu[x])
+                for i in range(topscore):
+                    mask, = np.where(bestcluster == i)
+                    for j in mask:
+                        new_dict[x]._sample_metadata[j]['cluster'] = inputs['cluster'][0] + '_' + str(i)
+                self.otu = new_dict
+                self.log['Cluster'] = str(topscore) + " clusters with " + inputs['cluster'][0] + " at " + \
+                                      datetime.now().strftime('%B %d %Y %H:%M:%S')
+                if inputs['split'] is not None:
+                    if inputs['split'][0] == 'TRUE':
+                        inputs['split'][0] = 'cluster'
+                        self.split_biom()
+            except Exception:
+                logger.error("Error occurred when clustering samples", exc_info=True)
+
 
 def _data_bin(biomfile, taxnum):
     """While the BIOM file collapse function collapses counts, it stores taxonomy in a manner

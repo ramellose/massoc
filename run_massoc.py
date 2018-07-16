@@ -17,19 +17,31 @@ __status__ = 'Development'
 __license__ = 'Apache 2.0'
 
 import wx
+from massoc.scripts.main import resource_path
 from wx.lib.pubsub import pub
 from massoc.GUI.intro import IntroPanel
 from massoc.GUI.input import InputPanel
 from massoc.GUI.process import ProcessPanel
 from massoc.GUI.network import NetworkPanel
+import os
+import massoc
 
+# source: https://stackoverflow.com/questions/4004353/logging-strategy-for-gui-program
+import logging
+import logging.handlers as handlers
+logger = logging.getLogger()
+hdlr = logging.FileHandler(resource_path("massoc.log"))
+formatter = logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
+hdlr.setFormatter(formatter)
+logger.addHandler(hdlr)
+logger.setLevel(logging.WARNING)
 
 class BuildFrame(wx.Frame):
     """Constructor"""
     def __init__(self):
         wx.Frame.__init__(self, None, title='massoc', size=(750, 700))
 
-        ico = wx.Icon("massoc.png", wx.BITMAP_TYPE_PNG)
+        ico = wx.Icon(resource_path("massoc.png"), wx.BITMAP_TYPE_PNG)
         self.SetIcon(ico)
 
         p = wx.Panel(self)

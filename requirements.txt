@@ -1,10 +1,10 @@
-sklearn
-argparse
-scikit-bio
 numpy
 scipy
 h5py
+matplotlib
 networkx
 multiprocess
+sklearn
+scikit-bio
 biom-format
 wxPython

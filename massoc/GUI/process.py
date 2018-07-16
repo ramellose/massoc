@@ -13,13 +13,17 @@ from wx.lib.pubsub import pub
 import numpy as np
 import biom
 from scipy.sparse import csr_matrix
-import matplotlib
-matplotlib.use('WXAgg')
+import os
+import massoc
 
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
 from matplotlib.backends.backend_wx import NavigationToolbar2Wx
 from matplotlib.figure import Figure
 
+import logging
+import logging.handlers as handlers
+logger = logging.getLogger()
+logger.setLevel(logging.WARNING)
 
 class ProcessPanel(wx.Panel):
     def __init__(self, parent):
@@ -383,48 +387,51 @@ class ProcessPanel(wx.Panel):
         Listener function that changes input values
         to values specified in settings file.
         """
-        if msg['min'] is not None:
-            self.min = msg['min']
-            self.min_number.SetValue(msg['min'][0])
-        if msg['fp'] is not None:
-            self.dir = msg['fp']
-        if msg['name'] is not None:
-            self.prefix.SetValue(msg['name'][0])
-            self.name = msg['name']
-        if msg['rar'] is not None:
-            self.rar = msg['rar']
-            rar = msg['rar'][0]
-            try:
-                rar = int(rar)
-                self.rar_number.SetValue(rar)
-            except ValueError:
-                self.rar_choice.SetSelection(0)
-        if msg['prev'] is not None:
-            self.prev = msg['prev']
-            self.prev_slider.SetTick(int(float((msg['prev'][0]))))
-            self.prev_val.SetValue(msg['prev'][0])
-        if msg['split'] is not None:
-            self.split = msg['split']
-            if msg['split'][0] is not 'TRUE':
-                split = self.split_list.FindString(msg['split'][0])
-                self.split_list.SetSelection(split)
-        if msg['cluster'] is not None:
-            self.bottomleftsizer.ShowItems(show=True)
-            self.Layout()
-            self.cluster = msg['cluster']
-            clus = self.cluster_choice.FindString(msg['cluster'][0])
-            self.cluster_choice.SetSelection(clus)
-            if msg['split'] is 'TRUE':
-                self.cluster_proc.SetSelection(1)
-            else:
-                self.cluster_proc.SetSelection(0)
-        if msg['levels'] is not None:
-            self.agglom = msg['levels']
-            agglomdict = {'otu': 0, 'species': 1, 'genus': 2,
-                          'family': 3, 'order': 4, 'class': 5,
-                          'phylum': 6}
-            for tax in msg['levels']:
-                self.tax_choice.Check(agglomdict[tax], True)
+        try:
+            if msg['min'] is not None:
+                self.min = msg['min']
+                self.min_number.SetValue(msg['min'][0])
+            if msg['fp'] is not None:
+                self.dir = msg['fp']
+            if msg['name'] is not None:
+                self.prefix.SetValue(msg['name'][0])
+                self.name = msg['name']
+            if msg['rar'] is not None:
+                self.rar = msg['rar']
+                rar = msg['rar'][0]
+                try:
+                    rar = int(rar)
+                    self.rar_number.SetValue(rar)
+                except ValueError:
+                    self.rar_choice.SetSelection(0)
+            if msg['prev'] is not None:
+                self.prev = msg['prev']
+                self.prev_slider.SetTick(int(float((msg['prev'][0]))))
+                self.prev_val.SetValue(msg['prev'][0])
+            if msg['split'] is not None:
+                self.split = msg['split']
+                if msg['split'][0] is not 'TRUE':
+                    split = self.split_list.FindString(msg['split'][0])
+                    self.split_list.SetSelection(split)
+            if msg['cluster'] is not None:
+                self.bottomleftsizer.ShowItems(show=True)
+                self.Layout()
+                self.cluster = msg['cluster']
+                clus = self.cluster_choice.FindString(msg['cluster'][0])
+                self.cluster_choice.SetSelection(clus)
+                if msg['split'] is 'TRUE':
+                    self.cluster_proc.SetSelection(1)
+                else:
+                    self.cluster_proc.SetSelection(0)
+            if msg['levels'] is not None:
+                self.agglom = msg['levels']
+                agglomdict = {'otu': 0, 'species': 1, 'genus': 2,
+                              'family': 3, 'order': 4, 'class': 5,
+                              'phylum': 6}
+                for tax in msg['levels']:
+                    self.tax_choice.Check(agglomdict[tax], True)
+        except Exception:
+            logger.error("Unable to load settings", exc_info=True)
 
     def register_figures(self, event):
         """Registers listbox event and calls generate_figures."""
@@ -432,19 +439,22 @@ class ProcessPanel(wx.Panel):
 
     def generate_figures(self):
         """Generates figures for diagnostics canvas."""
-        file = self.file_list.GetSelection()
-        file = self.file_list.GetString(file)
-        biomfile = biom.load_table(file)
-        data = biomfile.matrix_data
-        data = csr_matrix.todense(data)
-        fracs = np.count_nonzero(data, axis=1)
-        nsamples = data.shape[1]
-        fracs = fracs / nsamples
-        self.prev.hist(fracs, bins=20)
-        sample_sums = np.transpose(np.count_nonzero(data, axis=0))
-        self.rar.hist(sample_sums, bins=40)
-        self.canvas1.draw()
-        self.canvas2.draw()
+        try:
+            file = self.file_list.GetSelection()
+            file = self.file_list.GetString(file)
+            biomfile = biom.load_table(file)
+            data = biomfile.matrix_data
+            data = csr_matrix.todense(data)
+            fracs = np.count_nonzero(data, axis=1)
+            nsamples = data.shape[1]
+            fracs = fracs / nsamples
+            self.prev.hist(fracs, bins=20)
+            sample_sums = np.transpose(np.count_nonzero(data, axis=0))
+            self.rar.hist(sample_sums, bins=40)
+            self.canvas1.draw()
+            self.canvas2.draw()
+        except Exception:
+            logger.error("Failed to generate figures", exc_info=True)
 
     def set_settings(self, msg):
         """
@@ -452,16 +462,19 @@ class ProcessPanel(wx.Panel):
         """
         filelist = list()
         self.settings = msg
-        if self.settings['biom_file'] is not None:
-            for name in self.settings['biom_file']:
-                filelist.append(name)
-        if self.settings['otu_table'] is not None:
-            for name in self.settings['otu_table']:
-                filelist.append(name)
-        if len(filelist) > 0:
-            self.file_list.Set(filelist)
-            self.file_list.SetSelection(0)
-            self.generate_figures()
+        try:
+            if self.settings['biom_file'] is not None:
+                for name in self.settings['biom_file']:
+                    filelist.append(name)
+            if self.settings['otu_table'] is not None:
+                for name in self.settings['otu_table']:
+                    filelist.append(name)
+            if len(filelist) > 0:
+                self.file_list.Set(filelist)
+                self.file_list.SetSelection(0)
+                self.generate_figures()
+        except Exception:
+            logger.error("Failed to save settings", exc_info=True)
 
 
 

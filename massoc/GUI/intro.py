@@ -13,9 +13,21 @@ import os
 import wx
 import wx.html
 import wx.lib.wxpTag
-
+from massoc.scripts.main import resource_path
 import massoc
+# import text & image files 
+from massoc.docs.demo import demo
+from massoc.docs.input import input
+from massoc.docs.intro import intro
+from massoc.docs.net import net
+from massoc.docs.proc import proc
+from massoc.docs.welcome import welcome
+from massoc.docs.img1 import img1
+from massoc.docs.img2 import img2
+from massoc.docs.img3 import img3
 
+import logging
+import logging.handlers as handlers
 
 class IntroPanel(wx.Panel):
     def __init__(self, parent):
@@ -25,47 +37,6 @@ class IntroPanel(wx.Panel):
         self.topsizer = wx.BoxSizer(wx.VERTICAL)
 
         btnsize = (150, -1)
-
-        path = (os.path.dirname(massoc.__file__) + '/docs/welcome.txt')
-        path = path.replace('\\', '/')
-        welcome_file = open(path, 'r')
-        welcome = welcome_file.read()
-        welcome_file.close()
-
-        path = (os.path.dirname(massoc.__file__) + '/docs/intro.txt')
-        path = path.replace('\\', '/')
-        intro_file = open(path, 'r')
-        intro = intro_file.read()
-        intro_file.close()
-
-        path = (os.path.dirname(massoc.__file__) + '/docs/input.txt')
-        path = path.replace('\\', '/')
-        input_file = open(path, 'r')
-        input = input_file.read()
-        input_file.close()
-
-        path = (os.path.dirname(massoc.__file__) + '/docs/proc.txt')
-        path = path.replace('\\', '/')
-        proc_file = open(path, 'r')
-        proc = proc_file.read()
-        proc_file.close()
-
-        path = (os.path.dirname(massoc.__file__) + '/docs/net.txt')
-        path = path.replace('\\', '/')
-        net_file = open(path, 'r')
-        net = net_file.read()
-        net_file.close()
-
-        path = (os.path.dirname(massoc.__file__) + '/docs/demo.txt')
-        path = path.replace('\\', '/')
-        demo_file = open(path, 'r')
-        demo = demo_file.read()
-        demo_file.close()
-
-        from massoc.docs.img1 import img1
-        from massoc.docs.img2 import img2
-        from massoc.docs.img3 import img3
-
         mfs = wx.MemoryFSHandler()
         wx.FileSystem.AddHandler(mfs)
         mfs.AddFile("input.png", img1.GetImage(), wx.BITMAP_TYPE_PNG)
@@ -76,7 +47,7 @@ class IntroPanel(wx.Panel):
         self.htmlbox.SetPage(welcome)
         self.topsizer.Add(self.htmlbox, 1, wx.ALIGN_CENTER_HORIZONTAL | wx.EXPAND | wx.ALL, 40)
 
-        self.ico = wx.StaticBitmap(self, -1, wx.Bitmap("massoc_large.png", wx.BITMAP_TYPE_ANY))
+        self.ico = wx.StaticBitmap(self, -1, wx.Bitmap(resource_path("massoc_large.png"), wx.BITMAP_TYPE_ANY))
 
         self.menusizer = wx.BoxSizer(wx.VERTICAL)
         self.menutitle = wx.StaticText(self, label="Documentation")

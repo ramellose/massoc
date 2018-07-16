@@ -1,4 +1,4 @@
-<h2>Input files</h2>
+input="""<h2>Input files</h2>
 <p>In this tab, you can supply files to <em>massoc</em>. Moreover, you can save or clear the current settings, and load saved settings from a .xyz settings file. If you supplied the correct inputs, the <strong>dialog box</strong> on the right will summarize some properties of your files. </p>
 <h3>Set default directory [-fp]</h3>
 <p>This directory contains the filepath to a location where you would like output files to be stored.</p>
@@ -94,3 +94,4 @@
 <h3>Save, load or clear settings</h3>
 <p>When you want to save the current settings, first specify the settings in the other tabs and then return here. The S<strong>ave settings </strong>button saves the settings to a .xyz file. This file can also be opened in Notepad for manual editing. Each row corresponds to a particular <strong><em>massoc </em></strong>setting. The <strong>Load settings </strong>button will set <em><strong>massoc</strong></em>'s settings to the settings in the selected file and display these settings in the graphical user interface. The <strong>Clear settings </strong>button removes all current settings from <em><strong>massoc</strong></em>.</p>
 <p>&nbsp;</p>
+"""

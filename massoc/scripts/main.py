@@ -16,14 +16,18 @@ __license__ = 'Apache 2.0'
 import argparse
 import sys
 from functools import partial
-
+import os
 from biom import load_table
 from biom.parse import MetadataMap
 from massoc.scripts.netwrap import Nets
 from multiprocess import Pool
-
 from massoc.scripts.batch import Batch
+import massoc
 
+import logging
+import logging.handlers as handlers
+logger = logging.getLogger()
+logger.setLevel(logging.WARNING)
 
 def get_input(argv):
     """This parser gets inputs for BIOM and tab-delimited file processing.
@@ -413,11 +417,23 @@ def run_parallel(nets):
     cores = 4
     if nets.inputs['cores'] is not None:
         cores = int(nets.inputs['cores'][0])
-    nets.write_bioms()
+    try:
+        nets.write_bioms()
+    except Exception:
+        logger.error('Could not write ' + str(nets.inputs['name'][0]) + ' to disk', exc_info=True)
     pool = Pool(cores)
     jobs = get_joblist(nets)
     func = partial(run_jobs, nets)
-    results = pool.map(func, iter(jobs))
+    try:
+        results = pool.map(func, iter(jobs))
+        logfile = open(resource_path("massoc.log"), 'r')
+        logtext = logfile.read()
+        logfile.close()
+        dump = open(nets.inputs['fp'], 'w')
+        dump.write(logtext)
+        dump.close()
+    except Exception:
+        logger.error('Failed to generate workers', exc_info=True)
     nets.networks = results[0]
     for i in range(1, len(jobs)):
         nets.networks = {**nets.networks, **results[i]}
@@ -438,6 +454,16 @@ def run_massoc(settings, mode="parallel"):
         networks = run_parallel(networks)
     networks.write_networks()
     networks.summary()
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller.
+     Source: https://stackoverflow.com/questions/7674790/bundling-data-files-with-pyinstaller-onefile"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 if __name__ == '__main__':
     options = get_input(sys.argv[1:])

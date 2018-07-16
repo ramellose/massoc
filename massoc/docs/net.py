@@ -1,4 +1,4 @@
-<h2>Network inference</h2>
+net="""<h2>Network inference</h2>
 <p>In this tab, you can specify which tools should be used to run network inference. For some of these tools, you can also adjust the settings. Finally, an overview of the settings is given, as well as an option to copy these to a command line call. </p>
 <h3>Select network inference tools to run [-tools]</h3>
 <p>Currently, SparCC, CoNet and SPIEC-EASI are supported. When selected, these tools will run network inference using the default settings. </p>
@@ -18,3 +18,4 @@
 <p>With all settings entered, <em><strong>massoc </strong></em>can generate a command line call that will perform the same tasks.</p>
 <h3>Run network inference</h3>
 <p>Network inference will start, and a loading bar keeps track of progress. When finished, one or more output XML files will be written to the previously specified filepath.</p>
+"""

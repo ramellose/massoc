@@ -18,10 +18,13 @@ from biom.parse import MetadataMap
 from massoc.scripts.batch import Batch
 from massoc.scripts.netwrap import Nets
 from wx.lib.pubsub import pub
-
 import massoc
-from massoc.scripts.main import run_parallel
+from massoc.scripts.main import run_parallel, resource_path
 
+import logging
+import logging.handlers as handlers
+logger = logging.getLogger()
+logger.setLevel(logging.WARNING)
 
 class NetworkPanel(wx.Panel):
     def __init__(self, parent):
@@ -252,62 +255,74 @@ class NetworkPanel(wx.Panel):
 
     def change_spiec_alg(self, event):
         """Takes settings input from GUI and uses it to rewrite the SPIEC-EASI script in execs."""
-        path = os.path.dirname(massoc.__file__) + '\\execs\\spieceasi.r'
-        path = path.replace('\\', '/')
-        spiec_script = open(path, 'r')
-        commands = spiec_script.read()
-        spiec_script.close()
-        alg = self.spiec_alg.GetSelection()
-        text = self.spiec_alg.GetString(alg)
-        if text == 'Meinshausen-Buhlmann':
-            commands = commands.replace('method = "glasso"', 'method = "mb"')
-        if text == 'Graphical Lasso':
-            commands = commands.replace('method = "mb"', 'method = "glasso"')
-        spiec_script = open(path, 'w')
-        spiec_script.write(commands)
-        spiec_script.close()
+        try:
+            path = os.path.dirname(massoc.__file__) + '\\execs\\spieceasi.r'
+            path = path.replace('\\', '/')
+            spiec_script = open(path, 'r')
+            commands = spiec_script.read()
+            spiec_script.close()
+            alg = self.spiec_alg.GetSelection()
+            text = self.spiec_alg.GetString(alg)
+            if text == 'Meinshausen-Buhlmann':
+                commands = commands.replace('method = "glasso"', 'method = "mb"')
+            if text == 'Graphical Lasso':
+                commands = commands.replace('method = "mb"', 'method = "glasso"')
+            spiec_script = open(path, 'w')
+            spiec_script.write(commands)
+            spiec_script.close()
+        except Exception:
+            logger.error("Failed to change SPIEC-EASI algorithm", exc_info=True)
 
     def change_spiec_stars(self, event):
         """Takes settings input from GUI and uses it to rewrite the SPIEC-EASI script in execs."""
-        path = os.path.dirname(massoc.__file__) + '\\execs\\spieceasi.r'
-        path = path.replace('\\', '/')
-        spiec_script = open(path, 'r')
-        commands = spiec_script.read()
-        spiec_script.close()
-        new_stars = 'rep.num=' + self.spiec_star.GetValue() + '))'
-        old_stars = commands.find('rep.num=')
-        old_stars = commands[old_stars:(old_stars+20)]  # need to make sure there is a \n in there
-        old_stars = old_stars.split('\n')[0]
-        commands = commands.replace(old_stars, new_stars)
-        spiec_script = open(path, 'w')
-        spiec_script.write(commands)
-        spiec_script.close()
+        try:
+            path = os.path.dirname(massoc.__file__) + '\\execs\\spieceasi.r'
+            path = path.replace('\\', '/')
+            spiec_script = open(path, 'r')
+            commands = spiec_script.read()
+            spiec_script.close()
+            new_stars = 'rep.num=' + self.spiec_star.GetValue() + '))'
+            old_stars = commands.find('rep.num=')
+            old_stars = commands[old_stars:(old_stars+20)]  # need to make sure there is a \n in there
+            old_stars = old_stars.split('\n')[0]
+            commands = commands.replace(old_stars, new_stars)
+            spiec_script = open(path, 'w')
+            spiec_script.write(commands)
+            spiec_script.close()
+        except Exception:
+            logger.error("Failed to change number of repetitions", exc_info=True)
 
     def generate_call(self, event):
         # otu_meta, nclust are not integrated in GUI yet
-        command = list()
-        command.append('main.py')
-        command_dict = {'biom_file': '-biom', 'otu_table': '-otu', 'tax_table': '-tax', 'sample_data': '-s',
-                        'otu_meta': '-od', 'cluster': '-cl', 'split': '-split', 'nclust': '-nclust', 'cores': '-cores',
-                        'prev': '-prev', 'fp': '-o', 'levels': '-levels', 'tools': '-tools', 'spiec': '-spiec',
-                        'conet': '-conet', 'spar': 'spar', 'spar_pval': '-spar_pval', 'spar_boot': '-spar_boot',
-                        'name': '-n', 'rar': '-rar', 'min': '-min'}
-        for i in command_dict:
-            if self.settings[i] is not None:
-                if len(self.settings[i]) > 0:
-                    command.append(command_dict[i])
-                    if len(self.settings[i]) > 1:
-                        subcommand = ' '.join(self.settings[i])
-                        command.append(subcommand)
-                    else:
-                        command.append(self.settings[i][0])
-        command = ' '.join(command)
-        dlg = wx.TextEntryDialog(None, "", "Command line call", command)
-        dlg.ShowModal()
+        try:
+            command = list()
+            command.append('main.py')
+            command_dict = {'biom_file': '-biom', 'otu_table': '-otu', 'tax_table': '-tax', 'sample_data': '-s',
+                            'otu_meta': '-od', 'cluster': '-cl', 'split': '-split', 'nclust': '-nclust', 'cores': '-cores',
+                            'prev': '-prev', 'fp': '-o', 'levels': '-levels', 'tools': '-tools', 'spiec': '-spiec',
+                            'conet': '-conet', 'spar': 'spar', 'spar_pval': '-spar_pval', 'spar_boot': '-spar_boot',
+                            'name': '-n', 'rar': '-rar', 'min': '-min'}
+            for i in command_dict:
+                if self.settings[i] is not None:
+                    if len(self.settings[i]) > 0:
+                        command.append(command_dict[i])
+                        if len(self.settings[i]) > 1:
+                            subcommand = ' '.join(self.settings[i])
+                            command.append(subcommand)
+                        else:
+                            command.append(self.settings[i][0])
+            command = ' '.join(command)
+            dlg = wx.TextEntryDialog(None, "", "Command line call", command)
+            dlg.ShowModal()
+        except Exception:
+            logger.error("Failed to generate command line call", exc_info=True)
 
     def run_network(self, event):
-        eg = Thread(target=massoc_worker, args=(self.settings,))
-        eg.start()
+        try:
+            eg = Thread(target=massoc_worker, args=(self.settings,))
+            eg.start()
+        except Exception:
+            logger.error("Failed to start worker thread", exc_info=True)
         dlg = LoadingBar(self.settings)
         dlg.ShowModal()
 
@@ -455,71 +470,84 @@ def massoc_worker(inputs):
     Alternative version of massoc's main pipe.
     Uses publisher to send messages instead of sys.stdout.write.
     """
-    filestore = {}
-    if inputs['biom_file'] is None:
-        if inputs['otu_table'] is None:
-            raise ValueError("Please supply either a biom file "
-                             "or a tab-delimited OTU table!")
-    i = 0
-    if inputs['biom_file'] is not None:
-        for x in inputs['biom_file']:
-            biomtab = load_table(x)
-            filestore[inputs['name'][i]] = biomtab
-            i += 1
-    if inputs['otu_table'] is not None:
-        j = 0  # j is used to match sample + tax data to OTU data
-        for x in inputs['otu_table']:
-            input_fp = x
-            sample_metadata_fp = None
-            observation_metadata_fp = None
-            obs_data = None
-            sample_data = None
-            biomtab = load_table(input_fp)
-            try:
-                sample_metadata_fp = inputs['sample_data'][j]
-                observation_metadata_fp = inputs['tax_table'][j]
-            except KeyError:
-                pass
-            if sample_metadata_fp is not None:
-                sample_f = open(sample_metadata_fp, 'r')
-                sample_data = MetadataMap.from_file(sample_f)
-                sample_f.close()
-                biomtab.add_metadata(sample_data, axis='sample')
-            if observation_metadata_fp is not None:
-                obs_f = open(observation_metadata_fp, 'r')
-                obs_data = MetadataMap.from_file(obs_f)
-                obs_f.close()
-                # for taxonomy collapsing,
-                # metadata variable needs to be a complete list
-                # not separate entries for each tax level
-                for i in list(obs_data):
-                    tax = list()
-                    for j in list(obs_data[i]):
-                        tax.append(obs_data[i][j])
-                        obs_data[i].pop(j, None)
-                    obs_data[i]['taxonomy'] = tax
-                biomtab.add_metadata(obs_data, axis='observation')
-            filestore[inputs['name'][i]] = biomtab
-            i += 1
-            j += 1
-    bioms = Batch(filestore, inputs)
-    if inputs['cluster'] is not None:
-        pub.sendMessage('update', msg='Clustering BIOM files...')
-        bioms.cluster_biom()
-    if inputs['split'] is not None and inputs['split'] is not 'TRUE':
-        bioms.split_biom()
-    if inputs['min'] is not None:
-        pub.sendMessage('update', msg='Setting minimum mean abundance...')
-        bioms.prev_filter(mode='min')
-    if inputs['rar'] is not None:
-        pub.sendMessage('update', msg='Rarefying counts...')
-        bioms.rarefy()
-    if inputs['prev'] is not None:
-        pub.sendMessage('update', msg='Setting prevalence filter...')
-        bioms.prev_filter(mode='prev')
-    nets = Nets(bioms)
-    pub.sendMessage('update', msg='Starting network inference. This may take some time!')
-    nets = run_parallel(nets)
-    nets.write_networks()
-    pub.sendMessage('update', msg="Finished running network inference!")
+    try:
+        filestore = {}
+        if inputs['biom_file'] is None:
+            if inputs['otu_table'] is None:
+                raise ValueError("Please supply either a biom file "
+                                 "or a tab-delimited OTU table!")
+        i = 0
+        if inputs['name'] is None:
+            inputs['name'] = list()
+            inputs['name'].append('file_')
+        if inputs['biom_file'] is not None:
+            for x in inputs['biom_file']:
+                biomtab = load_table(x)
+                filestore[inputs['name'][i]] = biomtab
+                i += 1
+        if inputs['otu_table'] is not None:
+            j = 0  # j is used to match sample + tax data to OTU data
+            for x in inputs['otu_table']:
+                input_fp = x
+                sample_metadata_fp = None
+                observation_metadata_fp = None
+                obs_data = None
+                sample_data = None
+                biomtab = load_table(input_fp)
+                try:
+                    sample_metadata_fp = inputs['sample_data'][j]
+                    observation_metadata_fp = inputs['tax_table'][j]
+                except KeyError:
+                    pass
+                if sample_metadata_fp is not None:
+                    sample_f = open(sample_metadata_fp, 'r')
+                    sample_data = MetadataMap.from_file(sample_f)
+                    sample_f.close()
+                    biomtab.add_metadata(sample_data, axis='sample')
+                if observation_metadata_fp is not None:
+                    obs_f = open(observation_metadata_fp, 'r')
+                    obs_data = MetadataMap.from_file(obs_f)
+                    obs_f.close()
+                    # for taxonomy collapsing,
+                    # metadata variable needs to be a complete list
+                    # not separate entries for each tax level
+                    for i in list(obs_data):
+                        tax = list()
+                        for j in list(obs_data[i]):
+                            tax.append(obs_data[i][j])
+                            obs_data[i].pop(j, None)
+                        obs_data[i]['taxonomy'] = tax
+                    biomtab.add_metadata(obs_data, axis='observation')
+                filestore[inputs['name'][i]] = biomtab
+                i += 1
+                j += 1
+        bioms = Batch(filestore, inputs)
+        if inputs['cluster'] is not None:
+            pub.sendMessage('update', msg='Clustering BIOM files...')
+            bioms.cluster_biom()
+        if inputs['split'] is not None and inputs['split'] is not 'TRUE':
+            bioms.split_biom()
+        if inputs['min'] is not None:
+            pub.sendMessage('update', msg='Setting minimum mean abundance...')
+            bioms.prev_filter(mode='min')
+        if inputs['rar'] is not None:
+            pub.sendMessage('update', msg='Rarefying counts...')
+            bioms.rarefy()
+        if inputs['prev'] is not None:
+            pub.sendMessage('update', msg='Setting prevalence filter...')
+            bioms.prev_filter(mode='prev')
+        nets = Nets(bioms)
+        logfile = open(resource_path("massoc.log"), 'r')
+        logtext = logfile.read()
+        logfile.close()
+        dump = open(inputs['fp'], 'w')
+        dump.write(logtext)
+        dump.close()
+        pub.sendMessage('update', msg='Starting network inference. This may take some time!')
+        nets = run_parallel(nets)
+        nets.write_networks()
+        pub.sendMessage('update', msg="Finished running network inference!")
+    except Exception:
+        logger.error("Failed to run worker", exc_info=True)
+
 
