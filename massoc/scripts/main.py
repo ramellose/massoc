@@ -429,7 +429,7 @@ def run_parallel(nets):
         logfile = open(resource_path("massoc.log"), 'r')
         logtext = logfile.read()
         logfile.close()
-        dump = open(nets.inputs['fp'], 'w')
+        dump = open(inputs['fp'], 'w')
         dump.write(logtext)
         dump.close()
     except Exception:

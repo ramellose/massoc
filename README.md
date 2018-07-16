@@ -6,10 +6,8 @@ A platform for inference and analysis of microbial association networks.
 
 To run <i>massoc</i>, you only need to run the appropriate executable for your platform.
 These executables are stand-alone and do not need the other files in this repository.
-<a href="https://github.com/ramellose/massoc/releases">Find the latest releases here</a>. 
 
-If you run into any bugs or the program appears to be stuck, the massoc.log file should tell you what went wrong.
-You can find this file in your specified user directory.
+If you run into any bugs or the program appears to be stuck, the log file should tell you what went wrong. 
 
 ## Development version and command line
 

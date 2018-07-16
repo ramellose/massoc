@@ -9,6 +9,11 @@ __email__ = 'lisa.rottjers@kuleuven.be'
 __status__ = 'Development'
 __license__ = 'Apache 2.0'
 
+import py2neo
+
+# assumes a local database is running
+from py2neo import Database
+db = Database("http://localhost:7474")
 
 def convert_neo(nets):
     """
