@@ -107,7 +107,7 @@ class Batch(object):
                 self.order[x + '_order'] = _data_bin(self.otu[x], 4)
                 self.class_[x + '_class'] = _data_bin(self.otu[x], 3)
                 self.phylum[x + '_phylum'] = _data_bin(self.otu[x], 2)
-            self.log['Collaped_tax'] = datetime.now().strftime('%B %d %Y %H:%M:%S')
+            self.log['collaped_tax'] = "True"
             self.write_bioms()
         except TypeError:
             logger.error("Could not collapse taxonomy", exc_info=True)
@@ -118,7 +118,11 @@ class Batch(object):
         as well as performed operations.
         """
         for key in self.log:
-            print(key + ': ' + self.log[key])
+            if type(self.log[key]) is str:
+                print(key + ': ' + self.log[key])
+            else:
+                for item in self.log[key]:
+                    print(item + ': ' + self.log[key][item])
 
 
     def write_bioms(self, fmt='hdf5'):
@@ -182,7 +186,6 @@ class Batch(object):
         minimum fraction of non-zero values required per OTU.
         After OTUs are filtered for prevalence,
         higher taxonomic levels are updated to reflect this.
-        Currently, the bin is not preserved.
         """
         for x in list(self.otu):
             data = self.otu[x].matrix_data
@@ -201,8 +204,7 @@ class Batch(object):
                             binotu = self.otu[x]._observation_ids[y]
                     if binotu is not None and 'Bin' not in keep_otus:
                         keep_otus.append(binotu)
-                    self.log['Prevalence_filter'] = self.inputs['prev'][0] + "% at " + \
-                        datetime.now().strftime('%B %d %Y %H:%M:%S')
+                    self.log['prevalence_filter'] = self.inputs['prev'][0] + "%"
             except Exception:
                 logger.error("Could not set prevalence filter", exc_info=True)
             try:
@@ -215,8 +217,7 @@ class Batch(object):
                             binotu = self.otu[x]._observation_ids[y]
                     if binotu is not None:
                         keep_otus.append(binotu)
-                    self.log['Abundance_filter'] = self.inputs['min'][0] + " counts at " + \
-                                                   datetime.now().strftime('%B %d %Y %H:%M:%S')
+                    self.log['abundance_filter'] = self.inputs['min'][0] + " counts"
             except Exception:
                 logger.error("Could not set a minimum count filter", exc_info=True)
             keep = self.otu[x].filter(keep_otus, axis="observation", inplace=False)
@@ -266,8 +267,7 @@ class Batch(object):
                         keep_samples.append(self.otu[x]._sample_ids[y])
                 keep = self.otu[x].filter(keep_samples, axis="sample", inplace=False)
                 batchcopy.otu[x] = keep.subsample(n=lowest_count, axis='sample')
-                self.log['Rarefaction'] = str(lowest_count) + " counts at " +\
-                                          datetime.now().strftime('%B %d %Y %H:%M:%S')
+                self.log['rarefaction'] = str(lowest_count) + " counts"
             except Exception:
                 logger.error("Unable to rarefy file", exc_info=True)
             for x in list(self.otu):
@@ -298,8 +298,7 @@ class Batch(object):
             except Exception:
                 logger.error("Failed to split files", exc_info=True)
         self.otu = new_dict
-        self.log['Split_variables'] = inputs['split'][0] + " at " +\
-                                      datetime.now().strftime('%B %d %Y %H:%M:%S') + "\n"
+        self.log['split_variables'] = inputs['split'][0]
 
     def cluster_biom(self):
         """First normalizes bioms so clustering is not affected,
@@ -322,6 +321,7 @@ class Batch(object):
         if type(self.otu) is not dict:
             raise ValueError("Cluster_biom requires a dictionary of biom files to be supplied.")
         normbatch = self.normalize_transform(mode='clr')
+        # CLR transform places data in Euclidean space
         for x in list(self.otu):
             try:
                 # define topscore and bestcluster for no cluster
@@ -331,7 +331,6 @@ class Batch(object):
                 data = csr_matrix.todense(norm_table.matrix_data)
                 data = np.matrix.transpose(data)
                 data = PCA(n_components=2).fit_transform(data)
-                # CLR transform places data in Euclidean space
                 randomclust = np.random.randint(2, size=len(data))
                 sh_score = [silhouette_score(data, randomclust)]
                 # K-means clustering, tests 2-4 clusters
@@ -377,8 +376,7 @@ class Batch(object):
                     for j in mask:
                         new_dict[x]._sample_metadata[j]['cluster'] = inputs['cluster'][0] + '_' + str(i)
                 self.otu = new_dict
-                self.log['Cluster'] = str(topscore) + " clusters with " + inputs['cluster'][0] + " at " + \
-                                      datetime.now().strftime('%B %d %Y %H:%M:%S')
+                self.log['cluster'] = str(topscore) + " clusters with " + inputs['cluster'][0]
                 if inputs['split'] is not None:
                     if inputs['split'][0] == 'TRUE':
                         inputs['split'][0] = 'cluster'

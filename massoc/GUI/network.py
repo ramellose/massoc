@@ -20,11 +20,15 @@ from massoc.scripts.netwrap import Nets
 from wx.lib.pubsub import pub
 import massoc
 from massoc.scripts.main import run_parallel, resource_path
+from massoc.scripts.main import general_settings
+from copy import deepcopy
+from time import sleep
 
 import logging
 import logging.handlers as handlers
 logger = logging.getLogger()
 logger.setLevel(logging.WARNING)
+
 
 class NetworkPanel(wx.Panel):
     def __init__(self, parent):
@@ -33,7 +37,6 @@ class NetworkPanel(wx.Panel):
         self.frame = parent
 
         btnsize = (300, -1)
-        btnmargin = 10
         boxsize = (300, 50)
         # adds columns
 
@@ -45,15 +48,13 @@ class NetworkPanel(wx.Panel):
         self.spar = None
 
         # while mainframe contains the main settings file, the NetworkPanel also needs it to generate a command call
-        self.settings = {'biom_file': None, 'otu_table': None, 'tax_table': None, 'sample_data': None,
-                         'otu_meta': None, 'cluster': None, 'split': None, 'prev': None, 'fp': None,
-                         'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar': None, 'spar_pval': None,
-                         'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None, 'min': None}
+        self.settings = general_settings
 
         pub.subscribe(self.review_settings, 'show_settings')
         pub.subscribe(self.format_settings, 'update_settings')
         pub.subscribe(self.clear_settings_net, 'clear_settings')
         pub.subscribe(self.load_settings_net, 'load_settings')
+        pub.subscribe(self.toggle_network, 'toggle_network')
 
         self.topsizer = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -139,7 +140,7 @@ class NetworkPanel(wx.Panel):
         # review settings
         self.rev_text = wx.StaticText(self, label='Current settings')
         self.review = wx.TextCtrl(self, value='', size=(boxsize[0], 200), style=wx.TE_READONLY | wx.TE_MULTILINE)
-        self.call = wx.Button(self, label='Export as command line call', size=btnsize)
+        self.call = wx.Button(self, label='Export command line call', size=btnsize)
         self.call.Bind(wx.EVT_BUTTON, self.generate_call)
         self.call.Bind(wx.EVT_MOTION, self.update_help)
         self.call.SetFont(wx.Font(16, wx.DECORATIVE, wx.NORMAL, wx.BOLD))
@@ -147,16 +148,18 @@ class NetworkPanel(wx.Panel):
         # Run button
         self.go = wx.Button(self, label='Run network inference', size=(btnsize[0], 40))
         self.go.Bind(wx.EVT_BUTTON, self.run_network)
-        self.go.SetFont(wx.Font(18, wx.DECORATIVE, wx.NORMAL, wx.BOLD))
+        self.go.SetFont(wx.Font(16, wx.DECORATIVE, wx.NORMAL, wx.BOLD))
         self.go.SetBackgroundColour(wx.Colour(0, 153, 51))
 
         self.rightsizer.Add(self.jobs_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.rightsizer.Add(self.jobs_cores, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.rightsizer.Add(self.jobs_choice, flag=wx.ALIGN_LEFT)
+        self.rightsizer.AddSpacer(40)
         self.rightsizer.Add(self.rev_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.rightsizer.Add(self.review, flag=wx.ALIGN_LEFT)
-        self.rightsizer.Add(self.call, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.rightsizer.AddSpacer(20)
+        self.rightsizer.Add(self.call, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.rightsizer.AddSpacer(10)
         self.rightsizer.Add(self.go, flag=wx.ALIGN_CENTER_HORIZONTAL)
 
         self.topleftsizer.Add(self.tool_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
@@ -318,6 +321,19 @@ class NetworkPanel(wx.Panel):
             logger.error("Failed to generate command line call", exc_info=True)
 
     def run_network(self, event):
+        self.settings['network'] = list()
+        self.settings['procbioms'] = list()
+        network_names = list()
+        biom_names = list()
+        for tool in self.settings['tools']:
+            for level in self.settings['levels']:
+                for name in self.settings['name']:
+                    filename = self.settings['fp'][0] + '/' + tool + '_' + name + '_' + level + '.txt'
+                    biomname = self.settings['fp'][0] + '/' + name + '_' + level + '.hdf5'
+                    biom_names.append(biomname)
+                    network_names.append(filename)
+        self.settings['network'] = network_names
+        self.settings['procbioms'] = biom_names
         try:
             eg = Thread(target=massoc_worker, args=(self.settings,))
             eg.start()
@@ -325,6 +341,8 @@ class NetworkPanel(wx.Panel):
             logger.error("Failed to start worker thread", exc_info=True)
         dlg = LoadingBar(self.settings)
         dlg.ShowModal()
+        self.send_settings()
+
 
     def review_settings(self, msg):
         """
@@ -361,7 +379,8 @@ class NetworkPanel(wx.Panel):
         Publisher function for settings
         """
         settings = {'tools': self.tools, 'spar_pval': self.spar_pval, 'spar_boot': self.spar_boot,
-                    'cores': self.cores, 'spar': self.spar, 'conet': self.conet}
+                    'cores': self.cores, 'spar': self.spar, 'conet': self.conet,
+                    'procbioms': self.settings['procbioms'], 'network': self.settings['network']}
         pub.sendMessage('update_settings', msg=settings)
 
     def format_settings(self, msg):
@@ -431,7 +450,39 @@ class NetworkPanel(wx.Panel):
         if msg['cores'] is not None:
             self.cores = msg['cores']
             self.jobs_choice.SetValue(msg['cores'][0])
+        if msg['conet'] is not None:
+            self.conet = self.settings['conet']
+            self.conet_txt.SetValue(self.settings['conet'][0])
+        if msg['spar'] is not None:
+            self.spar = self.settings['spar']
+            self.spar_txt.SetValue(self.settings['spar'][0])
         self.send_settings()
+
+    def toggle_network(self, msg):
+        if msg == 'Yes':
+            self.tool_txt.Enable(True)
+            self.jobs_choice.Enable(True)
+            self.call.Enable(True)
+            self.go.Enable(True)
+            self.tool_box.Enable(True)
+            self.conet_button.Enable(True)
+            self.spar_button.Enable(True)
+            self.settings_txt.Enable(True)
+            self.settings_choice.Enable(True)
+            self.jobs_cores.Enable(True)
+            self.jobs_text.Enable(True)
+        if msg == 'No':
+            self.tool_txt.Enable(False)
+            self.jobs_choice.Enable(False)
+            self.call.Enable(False)
+            self.go.Enable(False)
+            self.tool_box.Enable(False)
+            self.conet_button.Enable(False)
+            self.spar_button.Enable(False)
+            self.settings_txt.Enable(False)
+            self.settings_choice.Enable(False)
+            self.jobs_cores.Enable(False)
+            self.jobs_text.Enable(False)
 
 
 class LoadingBar(wx.Dialog):
@@ -440,10 +491,9 @@ class LoadingBar(wx.Dialog):
         wx.Dialog.__init__(self, None, title="Progress")
         if settings['tools'] is not None and settings['levels'] is not None:
             self.number_networks = (len(settings['tools']) * len(settings['levels'])) + 1
-
         self.count = 0
         self.text = wx.StaticText(self, label="Starting...")
-        self.progress = wx.Gauge(self, range=self.number_networks)
+        self.progress = wx.Gauge(self, range=self.number_networks+2)
         sizer = wx.BoxSizer(wx.VERTICAL)
         sizer.Add(self.text, 0, wx.EXPAND | wx.ALL, 10)
         sizer.Add(self.progress, 0, wx.EXPAND | wx.ALL, 10)
@@ -451,18 +501,16 @@ class LoadingBar(wx.Dialog):
         pub.subscribe(self.get_progress, "update")
 
     def get_progress(self, msg):
-        """This is not working yet! Find a better way to track progress of the thread... """
+        """Progress bar appears to work, but end /start is not calculated correctly.
+        Issue is trivial but may be nice to fix. """
         if msg is 'Writing to disk...' or 'Starting network inference. This may take some time!':
             self.count += 1
-        if msg is 'Starting network inference. This may take some time!':
-            self.timer.Start()
-        if msg is 'Finished running network inference!':
-            self.timer.Stop()
-            print(self.timer.GetInterval())
-            self.Destroy()
         self.progress.SetValue(self.count)
         print(msg)
         self.text.SetLabel(msg)
+        if msg == 'Finished running network inference!':
+            sleep(3)
+            self.Destroy()
 
 
 def massoc_worker(inputs):
@@ -522,6 +570,22 @@ def massoc_worker(inputs):
                 i += 1
                 j += 1
         bioms = Batch(filestore, inputs)
+        # it is possible that there are forbidden characters in the OTU identifiers
+        # we can forbid people from using those, or replace those with an underscore
+        for name in bioms.otu:
+            biomfile = bioms.otu[name]
+            taxon_ids = biomfile._observation_ids  # need to be careful with these operations
+            taxon_index = biomfile._obs_index  # likely to corrupt BIOM file if done wrong
+            new_ids = deepcopy(taxon_ids)
+            new_indexes = deepcopy(taxon_index)
+            for i in range(0, len(taxon_ids)):
+                id = taxon_ids[i]
+                new_id = id.replace(" ", "_")
+                new_ids[i] = new_id
+                new_indexes[new_id] = new_indexes.pop(id)
+            biomfile._observation_ids = new_ids
+            biomfile._obs_index = new_indexes
+            bioms.otu[name] = biomfile
         if inputs['cluster'] is not None:
             pub.sendMessage('update', msg='Clustering BIOM files...')
             bioms.cluster_biom()
@@ -537,16 +601,21 @@ def massoc_worker(inputs):
             pub.sendMessage('update', msg='Setting prevalence filter...')
             bioms.prev_filter(mode='prev')
         nets = Nets(bioms)
-        logfile = open(resource_path("massoc.log"), 'r')
-        logtext = logfile.read()
-        logfile.close()
-        dump = open(inputs['fp'], 'w')
-        dump.write(logtext)
-        dump.close()
+        try:
+            logfile = open(resource_path("massoc.log"), 'r')
+            logtext = logfile.read()
+            logfile.close()
+            dump = open(inputs['fp'][0], 'w')
+            dump.write(logtext)
+            dump.close()
+        except Exception:
+            pass
         pub.sendMessage('update', msg='Starting network inference. This may take some time!')
         nets = run_parallel(nets)
         nets.write_networks()
+        nets.write_bioms()
         pub.sendMessage('update', msg="Finished running network inference!")
+        return nets
     except Exception:
         logger.error("Failed to run worker", exc_info=True)
 

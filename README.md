@@ -1,30 +1,24 @@
 # massoc
 
-A platform for inference and analysis of microbial association networks.
+A platform for inference and analysis of microbial association networks. V0.1.0.
 
 ## Getting Started
 
 To run <i>massoc</i>, you only need to run the appropriate executable for your platform.
 These executables are stand-alone and do not need the other files in this repository.
-
-If you run into any bugs or the program appears to be stuck, the log file should tell you what went wrong. 
+<a href="https://github.com/ramellose/massoc/releases">Find the latest releases here</a>.
 
 ## Development version and command line
 
 For development purposes, the GUI can be executed from run_massoc.py.
-The command line interface is accessible through main.py, but we are working on a stand-alone version that does not require you to manage dependencies.
+The command line interface is accessible through main.py, but I am working on a stand-alone version that does not require you to manage dependencies.
 
 massoc runs on Python >= 3.5. All its dependencies are listed in the requirements.txt file.
-Install them with:
-```
-pip install -r requirements.txt
-```
 
 ## Network inference in <i>massoc</i>
 
 To run network inference, you will need to ensure that your system can run your chosen network inference tools.
 If you want to run CoNet, SparCC or SPIEC-EASI from <i>massoc</i>, the instructions below will help you get started. 
-However, the next update will also let you import networks from separate files that were generated outside <i>massoc</i>.
 
 ### Running SPIEC-EASI
 
@@ -57,9 +51,18 @@ To run SparCC, you will need to have Python 2.6 or 2.7 installed.
 On Windows, it will be necessary to set your PATH so both installations can be found.
 Find your Python 2 installation, rename the python.exe file to python2.exe and add it to your PATH.
 
+### Neo4j
+
+The graph database utilities are built on Neo4j.
+Download the Neo4j Server community edition from [here](https://neo4j.com/download-center/#releases).
+Extract the files from the distribution and run <b>bin\neo4j.bat console</b> to initialize the server.
+On Linux, set your default Java version to 1.8.0:
+sudo apt install openjdk-8-jk
+sudo update-java-alternatives --set java-1.8.0-openjdk-amd64
+
 ### Tutorials
 
-The <i>massoc</i> documentation contains a demo. Give the example BIOM files in the data folder a try!
+Check out the demo at https://github.com/ramellose/massoc/raw/master/massoc/docs/massoc_demo.pdf
 
 ### Contributions
 

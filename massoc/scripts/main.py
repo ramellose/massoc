@@ -23,11 +23,24 @@ from massoc.scripts.netwrap import Nets
 from multiprocess import Pool
 from massoc.scripts.batch import Batch
 import massoc
+from subprocess import call
+import numpy as np
+import networkx as nx
+from copy import deepcopy
 
 import logging
 import logging.handlers as handlers
 logger = logging.getLogger()
 logger.setLevel(logging.WARNING)
+
+general_settings = {'biom_file': None, 'otu_table': None, 'tax_table': None, 'sample_data': None,
+                    'otu_meta': None, 'cluster': None, 'split': None, 'prev': None, 'fp': None,
+                    'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar': None, 'spar_pval': None,
+                    'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None, 'min': None,
+                    'network': None, 'assoc': None, 'agglom': None, 'logic': None,
+                    'agglom_weight': None, 'export': None, 'neo4j': None, 'gml_name': None,
+                    'procbioms': None, 'address': None, 'username': None, 'password': None}
+
 
 def get_input(argv):
     """This parser gets inputs for BIOM and tab-delimited file processing.
@@ -206,6 +219,16 @@ def get_input(argv):
     print(inputs)
     return inputs
 
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller.
+     Source: https://stackoverflow.com/questions/7674790/bundling-data-files-with-pyinstaller-onefile"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 
 def combine_data(inputs):
     """Takes all input and returns a dictionary of biom files.
@@ -265,6 +288,22 @@ def combine_data(inputs):
             i += 1
             j += 1
     bioms = Batch(filestore, inputs)
+    # it is possible that there are forbidden characters in the OTU identifiers
+    # we can forbid people from using those, or replace those with an underscore
+    for name in bioms.otu:
+        biomfile = bioms.otu[name]
+        taxon_ids = biomfile._observation_ids  # need to be careful with these operations
+        taxon_index = biomfile._obs_index      # likely to corrupt BIOM file if done wrong
+        new_ids = deepcopy(taxon_ids)
+        new_indexes = deepcopy(taxon_index)
+        for i in range(0, len(taxon_ids)):
+            id = taxon_ids[i]
+            new_id = id.replace(" ", "_")
+            new_ids[i] = new_id
+            new_indexes[new_id] = new_indexes.pop(id)
+        biomfile._observation_ids = new_ids
+        biomfile._obs_index = new_indexes
+        bioms.otu[name] = biomfile
     if inputs['cluster'] is not None:
         sys.stdout.write('Clustering BIOM files...')
         sys.stdout.flush()
@@ -272,7 +311,7 @@ def combine_data(inputs):
     if inputs['split'] is not None and inputs['split'] is not 'TRUE':
         bioms.split_biom()
     if inputs['min'] is not None:
-        sys.stdout.write('Removing samples below minimum count...')
+        sys.stdout.write('Removing taxa below minimum count...')
         sys.stdout.flush()
         bioms.prev_filter(mode='min')
     if inputs['rar'] is not None:
@@ -283,64 +322,8 @@ def combine_data(inputs):
         sys.stdout.write('Setting prevalence filter...')
         sys.stdout.flush()
         bioms.prev_filter(mode='prev')
-    bioms.write_bioms()
+    bioms = Nets(bioms)
     return bioms
-
-
-def run_networks(nets):
-    """
-    If network names are specified in the input files,
-    this function calls the appropriate networks.
-    This function is run sequentially when parallel is set to False.
-    Otherwise, it pickles the network object
-    and passes this to a function
-    that can process the pickled object in parallel.
-    Currently only works with default setting files.
-    """
-    if nets.inputs['levels'] is not None:
-        if len(nets.inputs['levels']) > 1 or nets.inputs['levels'][0] is not 'otu':
-            sys.stdout.write('Collapsing taxonomy...')
-            sys.stdout.flush()
-            nets.collapse_tax()
-    else:
-        nets.inputs['levels'] = list()
-        nets.inputs['levels'].append('otu')
-    if nets.inputs['tools'] is not None:
-        if 'spiec-easi' in nets.inputs['tools']:
-            sys.stdout.write('Running SPIEC-EASI...')
-            sys.stdout.flush()
-            nets.run_spiec()
-        if 'sparcc' in nets.inputs['tools']:
-            sys.stdout.write('Running SparCC...')
-            sys.stdout.flush()
-            nets.run_spar()
-        if 'conet' in nets.inputs['tools']:
-            sys.stdout.write('Running CoNet...')
-            sys.stdout.flush()
-            nets.run_conet()
-    if nets.inputs['spiec'] is not None:
-        sys.stdout.write('Running SPIEC-EASI with custom settings...')
-        # sys.stdout.flush()
-        nets.run_spiec(settings=nets.inputs['spiec'])
-    if nets.inputs['conet'] is not None:
-        sys.stdout.write('Running CoNet with custom settings...')
-        sys.stdout.flush()
-    if nets.inputs['spar_boot'] is not None and nets.inputs['spar_pval'] is None:
-        sys.stdout.write('Running SparCC with custom settings...')
-        sys.stdout.flush()
-        nets.run_spar(boots=nets.inputs['spar_boot'])
-    if nets.inputs['spar_pval'] is not None and nets.inputs['spar_boot'] is None:
-        sys.stdout.write('Running SparCC with custom settings...')
-        sys.stdout.flush()
-        nets.run_spar(pval_threshold=nets.inputs['spar_pval'])
-    if nets.inputs['spar_boot'] and nets.inputs['spar_pval'] is not None:
-        sys.stdout.write('Running SparCC with custom settings...')
-        sys.stdout.flush()
-        nets.run_spar(boots=nets.inputs['spar_boot'], pval_threshold=nets.inputs['spar_pval'])
-    sys.stdout.write('Finished running network inference!')
-    sys.stdout.flush()
-    return(nets)
-
 
 def run_jobs(nets, job):
     """
@@ -351,24 +334,8 @@ def run_jobs(nets, job):
         sys.stdout.write('Running SPIEC-EASI...')
         sys.stdout.flush()
         nets.run_spiec()
-    if 'sparcc' in job:
+    if 'spar' in job:
         sys.stdout.write('Running SparCC...')
-        sys.stdout.flush()
-        nets.run_spar()
-    if 'conet' in job:
-        sys.stdout.write('Running CoNet...')
-        sys.stdout.flush()
-        nets.run_conet()
-    if 'spiec_setting' in job:
-        sys.stdout.write('Running SPIEC-EASI with custom settings...')
-        sys.stdout.flush()
-        nets.run_spiec(list(job.values())[0][1])
-    if 'conet_setting' in job:
-        sys.stdout.write('Running CoNet with custom settings...')
-        sys.stdout.flush()
-        nets.run_conet(list(job.values())[0][1])
-    if 'spar_setting' in job:
-        sys.stdout.write('Running SparCC with custom settings...')
         sys.stdout.flush()
         if len(job['spar_setting'][1]) == 2:
             nets.run_spar(boots=job['spar_setting'][1]['spar_boot'], pval_threshold=job['spar_setting'][1]['spar_pval'])
@@ -377,6 +344,16 @@ def run_jobs(nets, job):
                 nets.run_spar(boots=job['spar_setting'][1]['spar_boot'])
             if 'spar_pval' in job['spar_setting'][1]:
                 nets.run_spar(pval_threshold=job['spar_setting'][1]['spar_pval'])
+        if 'spar_setting' not in job:
+            nets.run_spar()
+    if 'conet' in job:
+        sys.stdout.write('Running CoNet...')
+        sys.stdout.flush()
+        nets.run_conet()
+    if 'spiec_setting' in job:
+        sys.stdout.write('Running SPIEC-EASI with custom settings...')
+        sys.stdout.flush()
+        nets.run_spiec(list(job.values())[0][1])
     return nets.networks
 
 
@@ -390,12 +367,11 @@ def get_joblist(nets):
     joblist = list()
     for level in nets.inputs['levels']:
         sublist = dict()
-        for i in nets.inputs['tools']:
-            sublist[i] = level
+        if nets.inputs['tools']:
+            for i in nets.inputs['tools']:
+                sublist[i] = level
         if nets.inputs['spiec'] is not None:
             sublist['spiec_setting'] = [level, nets.inputs['spiec']]
-        if nets.inputs['conet'] is not None:
-            sublist['conet_setting'] = [level, nets.inputs['conet']]
         if nets.inputs['spar_boot'] or nets.inputs['spar_pval'] is not None:
             sublist['spar_setting'] = [level, {'spar_boot': nets.inputs['spar_boot'],
             'spar_pval': nets.inputs['spar_pval']}]
@@ -423,47 +399,73 @@ def run_parallel(nets):
         logger.error('Could not write ' + str(nets.inputs['name'][0]) + ' to disk', exc_info=True)
     pool = Pool(cores)
     jobs = get_joblist(nets)
+    for item in jobs:
+        for key in item.keys():
+            if key == 'conet':
+                # copies CoNet script path
+                path = os.path.dirname(massoc.__file__) + '\\execs\\CoNet.sh'
+                path = path.replace('\\', '/')
+                nets.log['conet'] = {'path': path}
+                nets.log['conet']['level'] = item[key]
+            if key == 'sparcc':
+                nets.log['sparcc'] = {'bootstraps': 100, 'pvalue': 0.001}
+                nets.log['sparcc']['level'] = item[key]
+            if nets.inputs['spar_boot'] is not None:
+                nets.log['sparcc']['bootstraps'] = nets.inputs['spar_boot']
+            if nets.inputs['spar_pval'] is not None:
+                nets.log['sparcc']['pvalue'] = nets.inputs['spar_pval']
+            if key == 'spiec-easi':
+                path = os.path.dirname(massoc.__file__) + '\\execs\\spieceasi.r'
+                path = path.replace('\\', '/')
+                file = open(path, 'r')
+                txt = file.read().splitlines()
+                nets.log['spiec-easi'] = {'method': txt[31], 'stars': txt[33][-36:]}
+                nets.log['spiec-easi']['level'] = item[key]
     func = partial(run_jobs, nets)
     try:
         results = pool.map(func, iter(jobs))
-        logfile = open(resource_path("massoc.log"), 'r')
-        logtext = logfile.read()
-        logfile.close()
-        dump = open(inputs['fp'], 'w')
-        dump.write(logtext)
-        dump.close()
     except Exception:
         logger.error('Failed to generate workers', exc_info=True)
     nets.networks = results[0]
+    logfile = open(resource_path("massoc.log"), 'r')
+    logtext = logfile.read()
+    logfile.close()
     for i in range(1, len(jobs)):
         nets.networks = {**nets.networks, **results[i]}
+    # clean up old written BIOM files
+    for x in nets.inputs['name']:
+        filename = nets.inputs['fp'][0] + '/' + x + '_otu.hdf5'
+        call("rm " + filename)
+        if len(nets.genus) != 0:
+            filename = nets.inputs['fp'][0] + '/' + x + '_species.hdf5'
+            call("rm " + filename)
+            filename = nets.inputs['fp'][0] + '/' + x + '_genus.hdf5'
+            call("rm " + filename)
+            filename = nets.inputs['fp'][0] + '/' + x + '_family.hdf5'
+            call("rm " + filename)
+            filename = nets.inputs['fp'][0] + '/' + x + '_order.hdf5'
+            call("rm " + filename)
+            filename = nets.inputs['fp'][0] + '/' + x + '_class.hdf5'
+            call("rm " + filename)
+            filename = nets.inputs['fp'][0] + '/' + x + '_phylum.hdf5'
+            call("rm " + filename)
     return(nets)
 
 
-def run_massoc(settings, mode="parallel"):
+def run_massoc(settings, mode='write'):
     """
     Pipes functions from the different massoc modules to run complete network inference.
     """
     if type(settings) is tuple:
         settings = settings[0]
     allbioms = combine_data(settings) # combines data, runs the preprocessing and writes to disk
-    networks = Nets(allbioms)
-    if mode != "parallel":
-        networks = run_networks(networks)
-    if mode == "parallel":
-        networks = run_parallel(networks)
-    networks.write_networks()
+    networks = run_parallel(allbioms)
     networks.summary()
+    if mode == 'write':
+        networks.write_networks()
+    else:
+        return networks
 
-def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller.
-     Source: https://stackoverflow.com/questions/7674790/bundling-data-files-with-pyinstaller-onefile"""
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
 
 if __name__ == '__main__':
     options = get_input(sys.argv[1:])

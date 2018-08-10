@@ -23,8 +23,8 @@ from massoc.GUI.intro import IntroPanel
 from massoc.GUI.input import InputPanel
 from massoc.GUI.process import ProcessPanel
 from massoc.GUI.network import NetworkPanel
-import os
-import massoc
+from massoc.GUI.database import DataPanel
+from massoc.scripts.main import general_settings
 
 # source: https://stackoverflow.com/questions/4004353/logging-strategy-for-gui-program
 import logging
@@ -36,6 +36,7 @@ hdlr.setFormatter(formatter)
 logger.addHandler(hdlr)
 logger.setLevel(logging.WARNING)
 
+
 class BuildFrame(wx.Frame):
     """Constructor"""
     def __init__(self):
@@ -45,24 +46,23 @@ class BuildFrame(wx.Frame):
         self.SetIcon(ico)
 
         p = wx.Panel(self)
-        nb = wx.Notebook(p)
-        self.tab1 = IntroPanel(nb)
-        self.tab2 = InputPanel(nb)
-        self.tab3 = ProcessPanel(nb)
-        self.tab4 = NetworkPanel(nb)
+        self.nb = wx.Notebook(p)
+        self.tab1 = IntroPanel(self.nb)
+        self.tab2 = InputPanel(self.nb)
+        self.tab3 = ProcessPanel(self.nb)
+        self.tab4 = NetworkPanel(self.nb)
+        self.tab5 = DataPanel(self.nb)
 
-        nb.AddPage(self.tab1, "Start")
-        nb.AddPage(self.tab2, "Input files")
-        nb.AddPage(self.tab3, "Preprocessing")
-        nb.AddPage(self.tab4, "Network inference")
+        self.nb.AddPage(self.tab1, "Start")
+        self.nb.AddPage(self.tab2, "Input files")
+        self.nb.AddPage(self.tab3, "Preprocessing")
+        self.nb.AddPage(self.tab4, "Network inference")
+        self.nb.AddPage(self.tab5, "Network database")
 
-        self.settings = {'biom_file': None, 'otu_table': None, 'tax_table': None, 'sample_data': None,
-                         'otu_meta': None, 'cluster': None, 'split': None, 'prev': None, 'fp': None,
-                         'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar': None, 'spar_pval': None,
-                         'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None, 'min': None}
+        self.settings = general_settings
 
         sizer = wx.BoxSizer()
-        sizer.Add(nb, 1, wx.EXPAND)
+        sizer.Add(self.nb, 1, wx.EXPAND)
         p.SetSizer(sizer)
 
         # listens to help messages from uncoupled tab files

@@ -19,38 +19,147 @@ from massoc.scripts.batch import Batch
 from massoc.scripts.netwrap import Nets
 
 import massoc
-from massoc.scripts.main import run_networks
+from massoc.scripts.main import run_parallel
 
 random.seed(7)
 
-# replace with proper test file!
-# looks like there is an issue with agglomerated files
-testloc = list()
-testloc.append(os.path.dirname(massoc.__file__)[:-6] + 'data\\arctic_soils.biom')
-testloc = [x.replace('\\', '/') for x in testloc]
-testbiom = {"test": biom.load_table(testloc[0])}
 
+testloc = list()
+testloc.append((os.path.dirname(massoc.__file__)[:-7]).replace('\\', '/'))
+
+tabotu = '[[ 243  567  112   45   2]\n ' \
+         '[ 235   56  788  232    1]\n ' \
+         '[4545   22    0    1    0]\n ' \
+         '[  41   20    2    4    0]]'
+
+tabtax = "[['k__Bacteria' 'p__Firmicutes' 'c__Clostridia' 'o__Clostridiales'\n  " \
+         "'f__Clostridiaceae' 'g__Anaerococcus' 's__']\n " \
+         "['k__Bacteria' 'p__Bacteroidetes' 'c__Bacteroidia' 'o__Bacteroidales'\n  " \
+         "'f__Prevotellaceae' 'g__Prevotella' 's__']\n " \
+         "['k__Bacteria' 'p__Proteobacteria' 'c__Alphaproteobacteria'\n  " \
+         "'o__Sphingomonadales' 'f__Sphingomonadaceae' 'g__Sphingomonas' 's__']\n " \
+         "['k__Bacteria' 'p__Verrucomicrobia' 'c__Verrucomicrobiae'\n  " \
+         "'o__Verrucomicrobiales' 'f__Verrucomicrobiaceae' 'g__Luteolibacter' 's__']]"
+
+tabmeta = "[['Australia' 'Hot']\n " \
+          "['Antarctica' 'Cold']\n " \
+          "['Netherlands' 'Rainy']\n " \
+          "['Belgium' 'Rainy']\n " \
+          "['Iceland' 'Cold']]"
+
+sample_ids = ['S%d' % i for i in range(1, 6)]
+observ_ids = ['O%d' % i for i in range(1, 5)]
+
+testraw = """{
+     "id":null,
+     "format": "Biological Observation Matrix 1.0.0-dev",
+     "format_url": "http://biom-format.org",
+     "type": "OTU table",
+     "generated_by": "QIIME revision XYZ",
+     "date": "2011-12-19T19:00:00",
+     "rows":[
+        {"id":"GG_OTU_1", "metadata":{"taxonomy":["k__Bacteria", "p__Proteoba\
+cteria", "c__Gammaproteobacteria", "o__Enterobacteriales", "f__Enterobacteriac\
+eae", "g__Escherichia", "s__"]}},
+        {"id":"GG_OTU_2", "metadata":{"taxonomy":["k__Bacteria", "p__Cyanobact\
+eria", "c__Nostocophycideae", "o__Nostocales", "f__Nostocaceae", "g__Dolichosp\
+ermum", "s__"]}},
+        {"id":"GG_OTU_3", "metadata":{"taxonomy":["k__Archaea", "p__Euryarchae\
+ota", "c__Methanomicrobia", "o__Methanosarcinales", "f__Methanosarcinaceae", "\
+g__Methanosarcina", "s__"]}},
+        {"id":"GG_OTU_4", "metadata":{"taxonomy":["k__Bacteria", "p__Firmicute\
+s", "c__Clostridia", "o__Halanaerobiales", "f__Halanaerobiaceae", "g__Halanaer\
+obium", "s__Halanaerobiumsaccharolyticum"]}},
+        {"id":"GG_OTU_5", "metadata":{"taxonomy":["k__Bacteria", "p__Proteobac\
+teria", "c__Gammaproteobacteria", "o__Enterobacteriales", "f__Enterobacteriace\
+ae", "g__Escherichia", "s__"]}}
+        ],
+     "columns":[
+        {"id":"Sample1", "metadata":{
+                                "BarcodeSequence":"CGCTTATCGAGA",
+                                "LinkerPrimerSequence":"CATGCTGCCTCCCGTAGGAGT",
+                                "BODY_SITE":"gut",
+                                "Description":"human gut"}},
+        {"id":"Sample2", "metadata":{
+                                "BarcodeSequence":"CATACCAGTAGC",
+                                "LinkerPrimerSequence":"CATGCTGCCTCCCGTAGGAGT",
+                                "BODY_SITE":"gut",
+                                "Description":"human gut"}},
+        {"id":"Sample3", "metadata":{
+                                "BarcodeSequence":"CTCTCTACCTGT",
+                                "LinkerPrimerSequence":"CATGCTGCCTCCCGTAGGAGT",
+                                "BODY_SITE":"gut",
+                                "Description":"human gut"}},
+        {"id":"Sample4", "metadata":{
+                                "BarcodeSequence":"CTCTCGGCCTGT",
+                                "LinkerPrimerSequence":"CATGCTGCCTCCCGTAGGAGT",
+                                "BODY_SITE":"skin",
+                                "Description":"human skin"}},
+        {"id":"Sample5", "metadata":{
+                                "BarcodeSequence":"CTCTCTACCAAT",
+                                "LinkerPrimerSequence":"CATGCTGCCTCCCGTAGGAGT",
+                                "BODY_SITE":"skin",
+                                "Description":"human skin"}},
+        {"id":"Sample6", "metadata":{
+                                "BarcodeSequence":"CTAACTACCAAT",
+                                "LinkerPrimerSequence":"CATGCTGCCTCCCGTAGGAGT",
+                                "BODY_SITE":"skin",
+                                "Description":"human skin"}}
+        ],
+     "matrix_type": "sparse",
+     "matrix_element_type": "int",
+     "shape": [5, 6],
+     "data":[[0,2,1],
+             [1,0,5],
+             [1,1,1],
+             [1,3,2],
+             [1,4,3],
+             [1,5,1],
+             [2,2,1],
+             [2,3,4],
+             [2,5,2],
+             [3,0,2],
+             [3,1,1],
+             [3,2,1],
+             [3,5,1],
+             [4,1,1],
+             [4,2,1]
+            ]
+    }
+"""
+
+testbiom = {"test": biom.parse.parse_biom_table(testraw)}
 inputs = {'biom_file': None,
           'cluster': None,
           'otu_meta': None,
-          'otu_table': ['otu_bananas.txt'],
           'prefix': None,
           'sample_data': None,
-          'split': 'BODY_SITE',
-          'tax_table': ['tax_bananas.txt'],
-          'fp': [testloc[0][:-18]],
+          'split': None,
+          'tax_table': None,
+          'fp': testloc,
+          'name': ['test'],
+          'otu_table': None,
           'tools': ['spiec-easi'],
           'spiec': None,
-          'conet': None,
+          'conet': [(os.path.dirname(massoc.__file__)[:-6] + 'tests\\CoNet3')],
+          'spar': [(os.path.dirname(massoc.__file__)[:-6] + 'tests\\SparCC')],
           'spar_pval': None,
           'spar_boot': None,
-          'levels': ['family'],
-          'name': ['test'],
-          'min': None,
-          'rar': None}
-batch = Batch(testbiom, inputs)
-netbatch = Nets(batch)
-netbatch.write_bioms()
+          'levels': ['otu', 'order'],
+          'prev': ['20'],
+          'cores': ['4'],
+          'neo4j': [(os.path.dirname(massoc.__file__)[:-6] + 'tests\\neo4j')]}
+netbatch =Nets(Batch(testbiom, inputs))
+
+filenames = list()
+for x in inputs['name']:
+    filenames.append(netbatch.inputs['fp'][0] + '/' + x + '_otu.hdf5')
+    filenames.append(netbatch.inputs['fp'][0] + '/' + x + '_species.hdf5')
+    filenames.append(netbatch.inputs['fp'][0] + '/' + x + '_genus.hdf5')
+    filenames.append(netbatch.inputs['fp'][0] + '/' + x + '_family.hdf5')
+    filenames.append(netbatch.inputs['fp'][0] + '/' + x + '_order.hdf5')
+    filenames.append(netbatch.inputs['fp'][0] + '/' + x + '_class.hdf5')
+    filenames.append(netbatch.inputs['fp'][0] + '/' + x + '_phylum.hdf5')
 
 class TestNetWrap(unittest.TestCase):
     """Tests netwrap.
@@ -62,75 +171,34 @@ class TestNetWrap(unittest.TestCase):
         """Check if the SparCC function call works
         by testing length of Nets.networks."""
         testnets = deepcopy(netbatch)
+        testnets.collapse_tax()
+        testnets.write_bioms()
         testnets.run_spar(boots=10)
-        self.assertEqual(len(testnets.networks), 1)
+        for name in filenames:
+            call(("rm " + name))
+        self.assertEqual(len(testnets.networks), 2)
 
     def test_conet(self):
         """Check if the CoNet function call works
         by testing length of Nets.networks."""
         testnets = deepcopy(netbatch)
+        testnets.collapse_tax()
+        testnets.write_bioms()
         testnets.run_conet()
-        self.assertEqual(len(testnets.networks), 1)
+        for name in filenames:
+            call(("rm " + name))
+        self.assertEqual(len(testnets.networks), 2)
 
     def test_spiec(self):
         """Check if the SPIEC-EASI function call works
         by testing length of Nets.networks."""
         testnets = deepcopy(netbatch)
+        testnets.collapse_tax()
+        testnets.write_bioms()
         testnets.run_spiec()
-        self.assertEqual(len(testnets.networks), 1)
-
-    def test_run_spiec_settings(self):
-        """Checks if a supplied .R file can be used to run SPIEC-EASI.
-        """
-        location = os.path.dirname(massoc.__file__)[:-6] + 'tests\\spieceasi_test.R'
-        location = location.replace('\\', '/')
-        execspiec = '#!/usr/bin/Rscript\n\n#\' @title Calls SPIEC-EASI from command line\n#\' ' \
-               '@description Calls SPIEC-EASI and saves output as a graphml file.\n#\' ' \
-               '@details Authors: Zachary D. Kurtz et al. SPIEC-EASI is available at: ' \
-               'https://github.com/zdk123/SpiecEasi.' \
-               '\n#\' Note that the settings for SPIEC-EASI can be adjusted from within this file.\n#\' ' \
-               'The most important settings are: Meinshausen-Buhlmann vs graphical lasso algorithm\n#\' ' \
-               'icov.select.params ' \
-               '(increasing this setting will improve the sparsity of the output network)\n#\'\n#\' ' \
-               '@param i input biom file\n#\' @param o output filename + path\n#\' @example spieceasi.R -fp ' \
-               '<filepath> -o <filepath>\n#\' @export\n\nlibrary(biom)\nlibrary(docopt)\nlibrary(SpiecEasi)\n\n' \
-               'doc = \'Usage:\n     spieceasi.r [-i input] [-o network]\n\nOptions:\n      ' \
-               '-i Filepath for input biom file\n      ' \
-               '-o Filepath for output network\n\'\n\nopts = docopt(doc)\n\n' \
-               'file = read_biom(opts$i)\ncounttab = t(as.matrix(biom_data(file)))\n' \
-               '# change SPIEC-EASI  method: Meinshausen-Buhlmann (mb) or graphical lasso (gl)\n' \
-               'method = "glasso"\n' \
-               '# number of STARS iterations is set with icov.select.params\n' \
-               'spiec.out = spiec.easi(counttab, method, icov.select.params=list(rep.num=30))\n' \
-               'if (method == "mb"){\n  adj = as.matrix(getOptBeta(spiec.out))\n}\n' \
-               'if (method == "glasso"){\n  adj = as.matrix(getOptMerge(spiec.out))\n}\n' \
-               'colnames(adj) = colnames(counttab)\nrownames(adj) = colnames(counttab)\n' \
-               'write.table(adj, opts$o, sep="\\t")\n'
-        file = open(location, "w")
-        file.write(execspiec)
-        file.close()
-        newsets = {'biom_file': [testloc[0]],
-                   'cluster': None,
-                   'otu_meta': None,
-                   'otu_table': ['otu_bananas.txt'],
-                   'prefix': None,
-                   'sample_data': None,
-                   'split': ['BODY_SITE'],
-                   'tax_table': ['tax_bananas.txt'],
-                   'fp': [testloc[0][:-18]],
-                   'tools': None,
-                   'spiec': [location],
-                   'conet': None,
-                   'spar_pval': None,
-                   'spar_boot': None,
-                   'levels': ['family'],
-                   'name': ['test']}
-        spiecbatch = Batch(testbiom, newsets)
-        spiecbatch = Nets(spiecbatch)
-        run_networks(spiecbatch)
-        call('rm ' + location[0])
-        self.assertEqual(len(spiecbatch.networks), 1)
-
+        for name in filenames:
+            call(("rm " + name))
+        self.assertEqual(len(testnets.networks), 2)
 
 if __name__ == '__main__':
     unittest.main()

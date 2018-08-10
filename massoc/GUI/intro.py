@@ -15,17 +15,7 @@ import wx.html
 import wx.lib.wxpTag
 from massoc.scripts.main import resource_path
 import massoc
-# import text & image files 
-from massoc.docs.demo import demo
-from massoc.docs.input import input
-from massoc.docs.intro import intro
-from massoc.docs.net import net
-from massoc.docs.proc import proc
-from massoc.docs.welcome import welcome
-from massoc.docs.img1 import img1
-from massoc.docs.img2 import img2
-from massoc.docs.img3 import img3
-
+import webbrowser
 import logging
 import logging.handlers as handlers
 
@@ -39,9 +29,6 @@ class IntroPanel(wx.Panel):
         btnsize = (150, -1)
         mfs = wx.MemoryFSHandler()
         wx.FileSystem.AddHandler(mfs)
-        mfs.AddFile("input.png", img1.GetImage(), wx.BITMAP_TYPE_PNG)
-        mfs.AddFile("process.png", img2.GetImage(), wx.BITMAP_TYPE_PNG)
-        mfs.AddFile("network.png", img3.GetImage(), wx.BITMAP_TYPE_PNG)
 
         self.htmlbox = wx.html.HtmlWindow(self, -1, size=(800,1500))
         self.htmlbox.SetPage(welcome)
@@ -53,33 +40,18 @@ class IntroPanel(wx.Panel):
         self.menutitle = wx.StaticText(self, label="Documentation")
         font1 = wx.Font(18, wx.DECORATIVE, wx.NORMAL, wx.BOLD)
         self.menutitle.SetFont(font1)
-        self.welcome_btn = wx.Button(self, label="Welcome to massoc", size=btnsize)
-        self.welcome_btn.Bind(wx.EVT_BUTTON, self.change_html)
-        self.intro_btn = wx.Button(self, label="Introduction", size=btnsize)
-        self.intro_btn.Bind(wx.EVT_BUTTON, self.change_html)
-        self.input_btn = wx.Button(self, label="Input files", size=btnsize)
-        self.input_btn.Bind(wx.EVT_BUTTON, self.change_html)
-        self.proc_btn = wx.Button(self, label="Preprocessing", size=btnsize)
-        self.proc_btn.Bind(wx.EVT_BUTTON, self.change_html)
-        self.net_btn = wx.Button(self, label="Network inference", size=btnsize)
-        self.net_btn.Bind(wx.EVT_BUTTON, self.change_html)
+        self.doc_btn = wx.Button(self, label="Manual", size=btnsize)
+        self.doc_btn.Bind(wx.EVT_BUTTON, self.link_manual)
         self.demo_btn = wx.Button(self, label="Demo", size=btnsize)
-        self.demo_btn.Bind(wx.EVT_BUTTON, self.change_html)
-
-        self.htmldict = {self.welcome_btn: welcome, self.intro_btn: intro, self.input_btn: input,
-                         self.proc_btn: proc, self.net_btn: net, self.demo_btn: demo}
+        self.demo_btn.Bind(wx.EVT_BUTTON, self.link_demo)
 
         self.menusizer.AddSpacer(50)
         self.menusizer.Add(self.ico, 1, wx.ALIGN_CENTER_HORIZONTAL, 5)
         self.menusizer.AddSpacer(50)
         self.menusizer.Add(self.menutitle, 1, wx.EXPAND | wx.ALIGN_CENTER_HORIZONTAL, 5)
-        self.menusizer.Add(self.welcome_btn, 1, wx.EXPAND, 5)
-        self.menusizer.Add(self.intro_btn, 1, wx.EXPAND, 5)
-        self.menusizer.Add(self.input_btn, 1, wx.EXPAND, 5)
-        self.menusizer.Add(self.proc_btn, 1, wx.EXPAND, 5)
-        self.menusizer.Add(self.net_btn, 1, wx.EXPAND, 5)
+        self.menusizer.Add(self.doc_btn, 1, wx.EXPAND, 5)
         self.menusizer.Add(self.demo_btn, 1, wx.EXPAND, 5)
-        self.menusizer.AddSpacer(100)
+        self.menusizer.AddSpacer(300)
 
         self.leftsizer.AddSpacer(20)
         self.leftsizer.Add(self.menusizer)
@@ -87,7 +59,29 @@ class IntroPanel(wx.Panel):
         self.leftsizer.Add(self.topsizer)
         self.SetSizerAndFit(self.leftsizer)
 
-    # write documentation in HTML and embed
-    def change_html(self, event):
-        name = event.GetEventObject()
-        self.htmlbox.SetPage(self.htmldict[name])
+    # write documentation in PDF and link
+    def link_manual(self, event):
+        url = "https://github.com/ramellose/massoc/raw/master/docs/massoc_manual.pdf"
+        webbrowser.open(url)
+
+    def link_demo(self, event):
+        url = "https://github.com/ramellose/massoc/raw/master/docs/massoc_demo.pdf"
+        webbrowser.open(url)
+
+welcome="""<h2><em>massoc</em>,<br /> a platform for microbial associations.<br /></h2>
+Currently, the following features are available:
+<ul>
+<li>Preprocessing of count files for network inference</li>
+<li>Clustering + splitting files by sample properties</li>
+<li>Batch network inference (in parallel)</li>
+<li>Network + BIOM file storage in a graph database </li>
+<li>Multi-network logic operations</li>
+<li>Taxonomy-dependent edge agglomeration</li>
+<li>More features are currently under construction.</li>
+</ul>
+<p>Welcome to <em><strong>massoc</strong></em>! <br /> Contact the author at lisa.rottjers (at) kuleuven.be, <br />or visit the <a href="https://github.com/ramellose/">repository</a>. Your feedback is much appreciated!</p>
+<p>Currently, you are using massoc 0.1. This version is still in early alpha. Encountering bugs is highly likely!</p>
+
+
+
+"""

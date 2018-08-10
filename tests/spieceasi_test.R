@@ -12,9 +12,9 @@
 #' @example spieceasi.R -fp <filepath> -o <filepath>
 #' @export
 
-require(biom)
-require(docopt)
-require(SpiecEasi)
+library(biom)
+library(docopt)
+library(SpiecEasi)
 
 doc = 'Usage:
      spieceasi.r [-i input] [-o network]

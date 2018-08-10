@@ -13,11 +13,9 @@ from wx.lib.pubsub import pub
 import numpy as np
 import biom
 from scipy.sparse import csr_matrix
-import os
 import massoc
-
+from massoc.scripts.main import general_settings
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
-from matplotlib.backends.backend_wx import NavigationToolbar2Wx
 from matplotlib.figure import Figure
 
 import logging
@@ -36,17 +34,15 @@ class ProcessPanel(wx.Panel):
         pub.subscribe(self.load_settings_proc, 'load_settings')
         pub.subscribe(self.enable_tax, 'receive_tax')
         pub.subscribe(self.set_settings, 'show_settings')
+        pub.subscribe(self.toggle_network, 'toggle_network')
+
 
         btnsize = (300, -1)
         btnmargin = 10
         boxsize = (300, 50)
         # adds columns
 
-        self.settings = {'biom_file': None, 'otu_table': None, 'tax_table': None, 'sample_data': None,
-                         'otu_meta': None, 'cluster': None, 'split': None, 'prev': None, 'fp': None,
-                         'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar_pval': None,
-                         'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None}
-
+        self.settings = general_settings
         self.name = None
         self.dir = None
         self.prev = ['20']
@@ -56,6 +52,7 @@ class ProcessPanel(wx.Panel):
         self.nclust = None
         self.rar = None
         self.min = None
+        self.filelist = None
         self.topsizer = wx.BoxSizer(wx.HORIZONTAL)
 
         # defines columns
@@ -73,23 +70,22 @@ class ProcessPanel(wx.Panel):
         self.prefix.Bind(wx.EVT_TEXT, self.get_filename)
 
         # diagnostics button
-
         self.dg_button = wx.StaticText(self, label='Show data properties', size=btnsize)
         self.file_list = wx.ListBox(self, choices=['Select files first'], size=btnsize)
         self.file_list.Bind(wx.EVT_LISTBOX, self.register_figures)
         self.file_list.Bind(wx.EVT_MOTION, self.update_help)
         self.file_list.SetSelection(0)
         self.figure1 = Figure(figsize=(3,2))
-        self.prev = self.figure1.add_subplot(211)
-        self.prev.set_xlabel('Prevalence')
-        self.prev.set_title('Taxon prevalence')
-        self.prev.set_ylabel('Number of taxa')
+        self.prevfig = self.figure1.add_subplot(211)
+        self.prevfig.set_xlabel('Prevalence')
+        self.prevfig.set_title('Taxon prevalence')
+        self.prevfig.set_ylabel('Number of taxa')
         self.figure1.set_tight_layout(True)
         self.figure2 = Figure(figsize=(3,2))
-        self.rar = self.figure2.add_subplot(211)
-        self.rar.set_xlabel('Count number')
-        self.rar.set_title('Sample counts')
-        self.rar.set_ylabel('Number of samples')
+        self.rarfig = self.figure2.add_subplot(211)
+        self.rarfig.set_xlabel('Count number')
+        self.rarfig.set_title('Sample counts')
+        self.rarfig.set_ylabel('Number of samples')
         self.figure2.set_tight_layout(True)
         self.canvas1 = FigureCanvas(self, -1, self.figure1)
         self.canvas2 = FigureCanvas(self, -1, self.figure2)
@@ -129,14 +125,6 @@ class ProcessPanel(wx.Panel):
         self.cluster_btn = wx.Button(self, label='Show clustering dialog', size=btnsize)
         self.cluster_btn.Bind(wx.EVT_MOTION, self.update_help)
         self.cluster_btn.Bind(wx.EVT_BUTTON, self.show_dialog)
-        self.alg_txt = wx.StaticText(self, label='Clustering algorithm')
-        self.cluster_choice = wx.ListBox(self, choices=['K-means', 'DBSCAN', 'Gaussian', 'Spectral',
-                                                        'Affinity Propagation', 'None'], size=(boxsize[0], 100))
-        self.cluster_choice.Bind(wx.EVT_MOTION, self.update_help)
-        self.cluster_choice.Bind(wx.EVT_LISTBOX, self.cluster_alg)
-        self.act_txt = wx.StaticText(self, label='Use cluster ID to: ')
-        self.cluster_proc = wx.ListBox(self, choices=['Add to metadata', 'Split files'], size=(boxsize[0], 40))
-        self.cluster_proc.Bind(wx.EVT_LISTBOX, self.cluster_func)
 
         # select taxonomic levels
         self.tax_txt = wx.StaticText(self, label='Taxonomic levels to analyze')
@@ -178,10 +166,6 @@ class ProcessPanel(wx.Panel):
         self.rightsizer.Add(self.tax_choice, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.rightsizer.AddSpacer(10)
         self.rightsizer.Add(self.cluster_btn, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.bottomleftsizer.Add(self.alg_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.bottomleftsizer.Add(self.cluster_choice, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.bottomleftsizer.Add(self.act_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.bottomleftsizer.Add(self.cluster_proc, flag=wx.ALIGN_CENTER_HORIZONTAL)
 
         self.leftsizer.Add(self.topleftsizer, wx.ALL, 20)
         self.leftsizer.AddSpacer(10)
@@ -203,9 +187,6 @@ class ProcessPanel(wx.Panel):
                                          'both of the split files. ',
                         self.cluster_btn: 'Cluster samples according to different algorithms; either use cluster '
                                           'identities to split files, or include them as additional metadata. ',
-                        self.cluster_choice: 'For a detailed explanation of the clustering algorithms, please visit '
-                                             'http://scikit-learn.org/stable/modules/'
-                                             'classes.html#module-sklearn.cluster',
                         self.rar_choice: 'Specify whether samples should be rarefied to equal depth or a '
                                          'specific value. Samples below a specified threshold are removed.',
                         self.min_number: 'Taxa with low mean counts can be removed if there are too many '
@@ -270,32 +251,6 @@ class ProcessPanel(wx.Panel):
         except KeyError:
             pass
 
-    def cluster_alg(self, event):
-        try:
-            clus = self.cluster_choice.GetSelection()
-            text = self.cluster_choice.GetString(clus)
-            self.cluster = list()
-            self.cluster.append(text)
-        except KeyError:
-            pass
-        self.send_settings()
-
-    def cluster_func(self, event):
-        """
-        This function specifies whether the cluster ID should be used to split files.
-        """
-        try:
-            proc = self.cluster_proc.GetSelections()
-            text = self.cluster_proc.GetString(proc)
-            if text is 'Split files':
-                if self.split is None:
-                    self.split = list('TRUE')
-                else:
-                    self.split[0] = 'TRUE'
-        except KeyError:
-            pass
-        self.send_settings()
-
     def get_levels(self, event):
         text = list()
         try:
@@ -326,8 +281,8 @@ class ProcessPanel(wx.Panel):
             pass
 
     def show_dialog(self, event):
-        self.bottomleftsizer.ShowItems(show=True)
-        self.Layout()
+        dlg = ClusterDialog(self.filelist)
+        dlg.ShowModal()
 
     def get_directory(self, msg):
         try:
@@ -345,7 +300,7 @@ class ProcessPanel(wx.Panel):
         Publisher function for settings
         """
         settings = {'prev': self.prev, 'split': self.split, 'name': self.name,
-                    'cluster': self.cluster, 'levels': self.agglom, 'nclust': self.nclust,
+                    'levels': self.agglom, 'nclust': self.nclust,
                     'rar': self.rar, 'min': self.min}
         pub.sendMessage('update_settings', msg=settings)
 
@@ -375,10 +330,6 @@ class ProcessPanel(wx.Panel):
             self.prev_val.SetValue("")
             for cb in np.nditer(self.split_list.GetSelections):
                 self.split_list.Deselect(cb)
-            for cb in np.nditer(self.cluster_choice.GetSelections):
-                self.cluster_choice.Deselect(cb)
-            for cb in np.nditer(self.cluster_proc.GetSelections):
-                self.cluster_proc.Deselect(cb)
             for cb in self.tax_choice.Checked:
                 self.tax_choice.Check(cb, False)
 
@@ -413,16 +364,6 @@ class ProcessPanel(wx.Panel):
                 if msg['split'][0] is not 'TRUE':
                     split = self.split_list.FindString(msg['split'][0])
                     self.split_list.SetSelection(split)
-            if msg['cluster'] is not None:
-                self.bottomleftsizer.ShowItems(show=True)
-                self.Layout()
-                self.cluster = msg['cluster']
-                clus = self.cluster_choice.FindString(msg['cluster'][0])
-                self.cluster_choice.SetSelection(clus)
-                if msg['split'] is 'TRUE':
-                    self.cluster_proc.SetSelection(1)
-                else:
-                    self.cluster_proc.SetSelection(0)
             if msg['levels'] is not None:
                 self.agglom = msg['levels']
                 agglomdict = {'otu': 0, 'species': 1, 'genus': 2,
@@ -448,37 +389,259 @@ class ProcessPanel(wx.Panel):
             fracs = np.count_nonzero(data, axis=1)
             nsamples = data.shape[1]
             fracs = fracs / nsamples
-            self.prev.hist(fracs, bins=20)
+            self.prevfig.hist(fracs, bins=20)
             sample_sums = np.transpose(np.count_nonzero(data, axis=0))
-            self.rar.hist(sample_sums, bins=40)
+            self.rarfig.hist(sample_sums, bins=40)
             self.canvas1.draw()
             self.canvas2.draw()
         except Exception:
             logger.error("Failed to generate figures", exc_info=True)
 
+    def toggle_network(self, msg):
+        if msg == 'Yes':
+            self.min_txt.Enable(True)
+            self.min_number.Enable(True)
+            self.rar_txt.Enable(True)
+            self.rar_choice.Enable(True)
+            self.prev_txt.Enable(True)
+            self.prev_val.Enable(True)
+            self.prev_slider.Enable(True)
+            self.split_txt.Enable(True)
+            self.split_list.Enable(True)
+            self.cluster_btn.Enable(True)
+            self.tax_txt.Enable(True)
+            self.tax_choice.Enable(True)
+        if msg == 'No':
+            self.min_txt.Enable(False)
+            self.min_number.Enable(False)
+            self.rar_txt.Enable(False)
+            self.rar_choice.Enable(False)
+            self.prev_txt.Enable(False)
+            self.prev_val.Enable(False)
+            self.prev_slider.Enable(False)
+            self.split_txt.Enable(False)
+            self.split_list.Enable(False)
+            self.cluster_btn.Enable(False)
+            self.tax_txt.Enable(False)
+            self.tax_choice.Enable(False)
     def set_settings(self, msg):
         """
         Stores settings file as tab property so it can be read by save_settings.
         """
-        filelist = list()
+        self.filelist = list()
         self.settings = msg
         try:
             if self.settings['biom_file'] is not None:
                 for name in self.settings['biom_file']:
-                    filelist.append(name)
+                    self.filelist.append(name)
             if self.settings['otu_table'] is not None:
                 for name in self.settings['otu_table']:
-                    filelist.append(name)
-            if len(filelist) > 0:
-                self.file_list.Set(filelist)
+                    self.filelist.append(name)
+            if len(self.filelist) > 0:
+                self.file_list.Set(self.filelist)
                 self.file_list.SetSelection(0)
                 self.generate_figures()
         except Exception:
             logger.error("Failed to save settings", exc_info=True)
 
 
+class ClusterDialog(wx.Dialog):
+    def __init__(self, files):
+        """Constructor"""
+        wx.Dialog.__init__(self, None, title="Cluster samples", size=(700,500))
+        self.cluster = None
+        self.split = None
+        pub.subscribe(self.clear_settings_proc, 'clear_settings')
+        pub.subscribe(self.load_settings_proc, 'load_settings')
 
+        self.alg_txt = wx.StaticText(self, label='Clustering algorithm')
+        self.cluster_choice = wx.ListBox(self, choices=['K-means', 'DBSCAN', 'Gaussian', 'Spectral',
+                                                        'Affinity Propagation', 'None'])
+        self.cluster_choice.Bind(wx.EVT_LISTBOX, self.register_figures)
+        self.act_txt = wx.StaticText(self, label='Use cluster ID to: ')
+        self.cluster_proc = wx.ListBox(self, choices=['Add to metadata', 'Split files'])
 
+        # cluster plots
+        self.dg_button = wx.StaticText(self, label='Show preview of sample clustering')
+        self.file_list = wx.ListBox(self, choices=files)
+        self.file_list.Bind(wx.EVT_LISTBOX, self.register_figures)
+        self.file_list.SetSelection(0)
+        self.figure1 = Figure(figsize=(4,3))
+        self.prev = self.figure1.add_subplot(111)
+        self.prev.set_xlabel('PCA axis 1')
+        self.prev.set_title('PCA plot of CLR-transformed samples')
+        self.prev.set_ylabel('PCA axis 2')
+        self.figure1.set_tight_layout(True)
+        self.canvas1 = FigureCanvas(self, -1, self.figure1)
 
+        # choose to keep clusters
+        self.ok_txt = wx.StaticText(self, label='Proceed with clustering?')
+        self.ok_btn = wx.Button(self, label='OK')
+        self.ok_btn.Bind(wx.EVT_BUTTON, self.cluster_func)
+        self.no_btn = wx.Button(self, wx.ID_CANCEL, label='Cancel')
+
+        self.topsizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.leftsizer = wx.BoxSizer(wx.VERTICAL)
+        self.leftsizer.AddSpacer(20)
+        self.leftsizer.Add(self.alg_txt, wx.ALIGN_CENTER_HORIZONTAL)
+        self.leftsizer.Add(self.cluster_choice, wx.EXPAND | wx.ALL, 20)
+        self.leftsizer.AddSpacer(20)
+        self.leftsizer.Add(self.act_txt, wx.ALIGN_CENTER_HORIZONTAL)
+        self.leftsizer.Add(self.cluster_proc, wx.EXPAND | wx.ALL, 20)
+        self.leftsizer.AddSpacer(20)
+        self.rightsizer = wx.BoxSizer(wx.VERTICAL)
+        self.rightsizer.AddSpacer(20)
+        self.rightsizer.Add(self.dg_button, wx.ALIGN_CENTER_HORIZONTAL)
+        self.rightsizer.Add(self.file_list, wx.EXPAND | wx.ALL, 20)
+        self.rightsizer.AddSpacer(20)
+        self.rightsizer.Add(self.canvas1, wx.EXPAND | wx.ALL, 20)
+        self.rightsizer.AddSpacer(20)
+        self.rightsizer.Add(self.ok_txt, wx.ALIGN_CENTER_HORIZONTAL)
+        self.minisizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.minisizer.Add(self.ok_btn, wx.EXPAND | wx.ALL, 5)
+        self.minisizer.Add(self.no_btn, wx.EXPAND | wx.ALL, 5)
+        self.rightsizer.Add(self.minisizer)
+        self.rightsizer.AddSpacer(20)
+        self.topsizer.AddSpacer(20)
+        self.topsizer.Add(self.leftsizer, wx.ALL, 20)
+        self.topsizer.AddSpacer(10)
+        self.topsizer.Add(self.rightsizer, wx.ALL, 20)
+        self.topsizer.AddSpacer(20)
+        self.SetSizer(self.topsizer)
+
+    def send_settings(self):
+        """
+        Publisher function for settings
+        """
+        settings = {'split': self.split, 'cluster': self.cluster}
+        pub.sendMessage('update_settings', msg=settings)
+
+    def cluster_func(self, event):
+        """
+        This function specifies whether the cluster ID should be used to split files.
+        """
+        try:
+            clus = self.cluster_choice.GetSelection()
+            text = self.cluster_choice.GetString(clus)
+            self.cluster = list()
+            self.cluster.append(text)
+        except KeyError:
+            pass
+        try:
+            proc = self.cluster_proc.GetSelections()
+            text = self.cluster_proc.GetString(proc)
+            if text is 'Split files':
+                self.split = list('TRUE')
+        except KeyError:
+            pass
+        self.send_settings()
+
+    def clear_settings_proc(self, msg):
+        """
+        Listener function that clears all input boxes.
+        The new "empty" settings are not sent to
+        the mainframe or network tabs,
+        because those also receive this message.
+        """
+        if msg == 'CLEAR':
+            for cb in np.nditer(self.cluster_choice.GetSelections):
+                self.cluster_choice.Deselect(cb)
+            for cb in np.nditer(self.cluster_proc.GetSelections):
+                self.cluster_proc.Deselect(cb)
+
+    def load_settings_proc(self, msg):
+        """
+        Listener function that changes input values
+        to values specified in settings file.
+        """
+        try:
+            if msg['cluster'] is not None:
+                self.cluster = msg['cluster']
+                clus = self.cluster_choice.FindString(msg['cluster'][0])
+                self.cluster_choice.SetSelection(clus)
+                if msg['split'] is 'TRUE':
+                    self.cluster_proc.SetSelection(1)
+                else:
+                    self.cluster_proc.SetSelection(0)
+        except Exception:
+            logger.error("Unable to load settings", exc_info=True)
+
+    def register_figures(self, event):
+        """Registers listbox event and calls generate_figures."""
+        self.generate_cluster_figures()
+
+    def generate_cluster_figures(self):
+        """Generates figures for diagnostics canvas."""
+        from massoc.scripts.batch import Batch
+        from sklearn.cluster import KMeans, DBSCAN, SpectralClustering, AffinityPropagation
+        from sklearn.mixture import GaussianMixture
+        from sklearn.metrics import silhouette_score
+        from sklearn.decomposition import PCA
+        nums = list(range(2, 5))
+        try:
+            file = self.file_list.GetSelection()
+            file = self.file_list.GetString(file)
+            x = 'init'
+            biomfile = {x: biom.load_table(file)}
+            algo = self.cluster_choice.GetSelection()
+            algo = self.cluster_choice.GetString(algo)
+            inputs = {'biom_file': [file],
+                      'cluster': [algo]}
+            normbatch = Batch(biomfile, inputs)
+            normbatch = normbatch.normalize_transform(mode='clr')
+            norm_table = normbatch.otu[x]
+            topscore = 0
+            bestcluster = [1] * len(norm_table.ids())
+            data = csr_matrix.todense(norm_table.matrix_data)
+            data = np.matrix.transpose(data)
+            data = PCA(n_components=2).fit_transform(data)
+            randomclust = np.random.randint(2, size=len(data))
+            sh_score = [silhouette_score(data, randomclust)]
+            # K-means clustering, tests 2-4 clusters
+            if inputs['cluster'][0] == 'K-means':
+                for i in nums:
+                    clusters = KMeans(i).fit_predict(data)
+                    silhouette_avg = silhouette_score(data, clusters)
+                    sh_score.append(silhouette_avg)
+                topscore = int(np.argmax(sh_score) + 1)
+                bestcluster = KMeans(topscore).fit_predict(data)
+            # DBSCAN clustering, automatically finds optimal cluster size
+            if inputs['cluster'][0] == 'DBSCAN':
+                bestcluster = DBSCAN().fit_predict(data)
+                topscore = len(set(bestcluster)) - (1 if -1 in bestcluster else 0)
+            # Gaussian Mixture Model (gmm) probability distribution
+            if inputs['cluster'][0] == 'Gaussian':
+                for i in nums:
+                    fit = GaussianMixture(i).fit(data)
+                    clusters = fit.predict(data)
+                    silhouette_avg = silhouette_score(data, clusters)
+                    sh_score.append(silhouette_avg)
+                topscore = int(np.argmax(sh_score) + 1)
+                bestfit = GaussianMixture(topscore).fit(data)
+                bestcluster = bestfit.predict(data)
+            # Spectral Clustering
+            if inputs['cluster'][0] == 'Spectral':
+                for i in nums:
+                    clusters = SpectralClustering(i).fit_predict(data)
+                    silhouette_avg = silhouette_score(data, clusters)
+                    sh_score.append(silhouette_avg)
+                topscore = int(np.argmax(sh_score) + 1)
+                bestcluster = SpectralClustering(topscore).fit_predict(data)
+            # Affinity Propagation clustering
+            if inputs['cluster'] == 'Affinity':
+                bestcluster = AffinityPropagation().fit_predict(data)
+                topscore = len(set(bestcluster)) - (1 if -1 in bestcluster else 0)
+            if max(sh_score) < 0.25:
+                raise ValueError("Silhouette score too low: please try a different algorithm. "
+                                 "Your data may not be suitable for clustering.")
+            for i in range(topscore):
+                mask, = np.where(bestcluster == i)
+                for j in mask:
+                    norm_table._sample_metadata[j]['cluster'] = inputs['cluster'][0] + '_' + str(i)
+            x, y = zip(*data)
+            self.prev.scatter(x, y, bestcluster)
+            self.canvas1.draw()
+        except Exception:
+            logger.error("Failed to generate figures", exc_info=True)
 
 

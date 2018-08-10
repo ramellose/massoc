@@ -15,6 +15,7 @@ import biom
 from biom.cli.metadata_adder import _add_metadata
 from biom.exception import BiomParseException
 import massoc
+from massoc.scripts.main import general_settings
 
 import logging
 import logging.handlers as handlers
@@ -29,10 +30,7 @@ class InputPanel(wx.Panel):
 
         self.frame = parent
 
-        self.settings = {'biom_file': None, 'otu_table': None, 'tax_table': None, 'sample_data': None,
-                         'otu_meta': None, 'cluster': None, 'split': None, 'prev': None, 'fp': None,
-                         'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar': None, 'spar_pval': None,
-                         'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None}
+        self.settings = general_settings
 
         self.currentDirectory = None
         self.currentDirectory = list(os.getcwd())
@@ -40,6 +38,7 @@ class InputPanel(wx.Panel):
         self.tax_file = None
         self.sample_file = None
         self.biom_file = None
+        self.network_path = None
         self.checks = str()
 
         btnsize = (300, -1)
@@ -67,6 +66,15 @@ class InputPanel(wx.Panel):
         self.biom_btn.Bind(wx.EVT_MOTION, self.update_help)
         self.biom_txt = wx.TextCtrl(self, size=(300, 80), style=wx.TE_MULTILINE)
 
+        # Opening network files
+        self.net_choice = wx.ListBox(self, choices=['Construct network', 'Open network file'], size=(300, 40))
+        self.net_choice.Bind(wx.EVT_LISTBOX, self.toggle_networks)
+        self.net_choice.Bind(wx.EVT_MOTION, self.update_help)
+        self.net_btn = wx.Button(self, label="Open network file", size=btnsize)
+        self.net_btn.Bind(wx.EVT_BUTTON, self.open_network)
+        self.net_btn.Bind(wx.EVT_MOTION, self.update_help)
+        self.net_btn.Disable()
+
         # Opening tab-delimited files box
         self.tab_btn = wx.Button(self, label="Show dialog for tab-delimited files", size=btnsize)
         self.tab_btn.Bind(wx.EVT_BUTTON, self.show_dialog)
@@ -74,18 +82,18 @@ class InputPanel(wx.Panel):
 
         self.count_btn = wx.Button(self, label="Open count tables", size=btnsize)
         self.count_btn.Bind(wx.EVT_BUTTON, self.open_count)
-        self.count_txt = wx.TextCtrl(self, size=(300, 80), style=wx.TE_MULTILINE)
+        self.count_txt = wx.TextCtrl(self, size=(300, 40), style=wx.TE_MULTILINE)
         self.count_txt.Hide()
         self.count_btn.Hide()
 
         self.tax_btn = wx.Button(self, label="Open taxonomy tables", size=btnsize)
-        self.tax_txt = wx.TextCtrl(self, size=(300, 80), style=wx.TE_MULTILINE)
+        self.tax_txt = wx.TextCtrl(self, size=(300, 40), style=wx.TE_MULTILINE)
         self.tax_btn.Bind(wx.EVT_BUTTON, self.open_tax)
         self.tax_txt.Hide()
         self.tax_btn.Hide()
 
         self.meta_btn = wx.Button(self, label="Open metadata", size=btnsize)
-        self.meta_txt = wx.TextCtrl(self, size=(300, 80), style=wx.TE_MULTILINE)
+        self.meta_txt = wx.TextCtrl(self, size=(300, 40), style=wx.TE_MULTILINE)
         self.meta_btn.Bind(wx.EVT_BUTTON, self.open_meta)
         self.meta_txt.Hide()
         self.meta_btn.Hide()
@@ -100,7 +108,7 @@ class InputPanel(wx.Panel):
         self.save_btn.Bind(wx.EVT_BUTTON, self.save_settings)
         self.save_btn.Bind(wx.EVT_MOTION, self.update_help)
 
-        # Save settings button
+        # Load settings button
         self.load_btn = wx.Button(self, label="Load settings", size=btnsize)
         self.load_btn.SetFont(wx.Font(16, wx.DECORATIVE, wx.NORMAL, wx.BOLD))
         self.load_btn.Bind(wx.EVT_BUTTON, self.load_settings)
@@ -113,11 +121,14 @@ class InputPanel(wx.Panel):
         self.clear_btn.Bind(wx.EVT_MOTION, self.update_help)
 
         self.topleftsizer.Add(self.dir_btn, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.topleftsizer.AddSpacer(10)
         self.topleftsizer.Add(self.dir_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.topleftsizer.AddSpacer(10)
         self.topleftsizer.Add(self.biom_btn, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.topleftsizer.Add(self.biom_txt, 1, wx.EXPAND | wx.ALIGN_LEFT | wx.ALL, btnmargin)
+        self.topleftsizer.AddSpacer(10)
+        self.topleftsizer.Add(self.net_choice, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.topleftsizer.Add(self.net_btn, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.topleftsizer.AddSpacer(10)
         self.topleftsizer.Add(self.tab_btn, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.bottomleftsizer.Add(self.count_btn, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.bottomleftsizer.Add(self.count_txt, 1, wx.EXPAND | wx.ALIGN_LEFT | wx.ALL, btnmargin)
@@ -150,7 +161,9 @@ class InputPanel(wx.Panel):
                         'Make sure to include the taxonomy table as well.',
                         self.clear_btn: 'Clear all settings in massoc.',
                         self.save_btn: 'Save all settings to a text file.',
-                        self.load_btn: 'Load settings from a text file.'}
+                        self.load_btn: 'Load settings from a text file.',
+                        self.net_choice: 'Construct a network in massoc or open one from an edge list.',
+                        self.net_btn: 'Load a network from an edge list. Supply the matching BIOM / tab-delimited files as well!'}
 
     def open_dir(self, event):
         dlg = wx.DirDialog(self, "Choose default directory", style=wx.DD_DEFAULT_STYLE)
@@ -180,6 +193,24 @@ class InputPanel(wx.Panel):
         self.checkfiles('biom')
         dlg.Destroy()
 
+    def open_network(self, event):
+        """
+        Create file dialog and show it.
+        """
+        dlg = wx.FileDialog(
+            self, message="Select network edge lists",
+            defaultDir=self.currentDirectory[0],
+            defaultFile="",
+            style=wx.FD_OPEN | wx.FD_MULTIPLE | wx.FD_CHANGE_DIR
+        )
+        if dlg.ShowModal() == wx.ID_OK:
+            paths = dlg.GetPaths()
+            paths = [x.replace('\\', '/') for x in paths]
+            self.network_path = paths
+        self.send_settings()
+        self.checkfiles('network')
+        dlg.Destroy()
+
     def update_help(self, event):
         """
         Publishes help message for statusbar at the bottom of the notebook.
@@ -195,7 +226,8 @@ class InputPanel(wx.Panel):
         """
         path = [x.replace('\\', '/') for x in self.currentDirectory]
         settings = {'fp': path, 'otu_table': self.count_file, 'tax_table': self.tax_file,
-                    'sample_data': self.sample_file, 'biom_file': self.biom_file}
+                    'sample_data': self.sample_file, 'biom_file': self.biom_file,
+                    'network': self.network_path}
         pub.sendMessage('update_settings', msg=settings)
 
     def clear_settings(self, event):
@@ -301,12 +333,26 @@ class InputPanel(wx.Panel):
                 wx.LogError("Cannot save current data in file '%s'." % pathname)
                 logger.error("Cannot save current data in file", exc_info=True)
 
+    def toggle_networks(self, event):
+        """Disables network dir button or tab files, depending on selection."""
+        choice_id = self.net_choice.GetSelection()
+        choice = self.net_choice.GetString(choice_id)
+        if choice == 'Construct network':
+            pub.sendMessage('toggle_network', msg='Yes')
+            self.net_btn.Enable(False)
+        if choice == 'Open network file':
+            pub.sendMessage('toggle_network', msg='No')
+            self.net_btn.Enable(True)
+
     def show_dialog(self, event):
         """
         Shows buttons with filenames
         for tab-delimited files.
         """
-        self.bottomleftsizer.ShowItems(show=True)
+        if self.tax_file.IsShown():
+            self.bottomleftsizer.ShowItems(show=False)
+        else:
+            self.bottomleftsizer.ShowItems(show=True)
         self.Layout()
 
     def open_count(self, event):
@@ -415,7 +461,6 @@ class InputPanel(wx.Panel):
                     wx.LogError(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!')
                     logger.error(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!', exc_info=True)
         if filetype is 'meta':
-            # this is not working yet, apparently the metadata file can't be read to the biomfile
             for x, z in zip(self.count_file, self.sample_file):
                 try:
                     biomtab = biom.load_table(x)
@@ -436,4 +481,12 @@ class InputPanel(wx.Panel):
                 except(TypeError, ValueError, BiomParseException):
                     wx.LogError(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!')
                     logger.error(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!', exc_info=True)
+        if filetype is 'network':
+            try:
+                nets_object = massoc.scripts.main.combine_data(self.settings)
+                nets_object.add_networks()
+                self.checks += "Network objects could be added successfully."
+            except (TypeError, ValueError):
+                wx.LogError('Unable to load network edge list!')
+                logger.error('Unable to load network edge list!')
         self.summ_box.SetValue(self.checks)

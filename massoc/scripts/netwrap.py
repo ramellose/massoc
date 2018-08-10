@@ -49,7 +49,7 @@ import massoc
 import biom
 import networkx
 import pandas
-
+from copy import deepcopy
 import massoc.execs
 from massoc.scripts.batch import Batch
 
@@ -145,7 +145,6 @@ class Nets(Batch):
             if path[-2:] != '.R':
                 raise ValueError("Please supply an R executable to run SPIEC-EASI.")
         filenames = self.get_filenames()
-        self.log['SPIEC-EASI_start'] = datetime.now().strftime('%B %d %Y %H:%M:%S')
         for x in filenames:
             try:
                 graphname = filenames[x][:-5] + '_spiec'
@@ -157,9 +156,8 @@ class Nets(Batch):
                 corrtab[corrtab < 0] = -1
                 net = networkx.from_pandas_adjacency(corrtab)
                 net = _add_tax(net, filenames[x])
-                self.networks[(x + "_spiec")] = net
+                self.networks[("spiec-easi_" + x)] = net
                 call("rm " + graphname)
-                self.log['SPIEC-EASI_finish'] = datetime.now().strftime('%B %d %Y %H:%M:%S') + "\n"
             except Exception:
                 logger.error("Unable to finish SPIEC-EASI on " + str(x), exc_info=True)
 
@@ -173,7 +171,6 @@ class Nets(Batch):
         path.append(self.inputs['spar'][0] + '\\PseudoPvals.py')
         path = [x.replace('\\', '/') for x in path]
         filenames = self.get_filenames()
-        self.log['SparCC_start'] = datetime.now().strftime('%B %d %Y %H:%M:%S')
         for x in filenames:
             try:
                 file = biom.load_table(filenames[x])
@@ -205,7 +202,7 @@ class Nets(Batch):
                 call(cmd)
                 call("rm -rf " + bootstraps)
                 call("rm " + tempname)
-                # call("rm " + cov)
+                call("rm " + cov)
                 corrtab = pandas.read_csv(corrs, sep='\t', index_col=0)
                 corrtab.columns = corrtab.index
                 pvaltab = pandas.read_csv(pvals, sep='\t', index_col=0)
@@ -216,67 +213,65 @@ class Nets(Batch):
                 corrtab[corrtab < 0] = -1
                 net = networkx.from_pandas_adjacency(corrtab)
                 net = _add_tax(net, filenames[x])
-                self.networks[(x + "_spar")] = net
+                self.networks[("sparcc_" + x)] = net
                 call("rm " + corrs + " " + pvals + " " + os.path.dirname(massoc.__file__)[:-6] + "\cov_mat_SparCC.out")
-                self.log['SparCC_finish'] = datetime.now().strftime('%B %d %Y %H:%M:%S')
             except Exception:
                 logger.error("Unable to finish SparCC on " + str(x), exc_info=True)
 
-    def run_conet(self, settings=None):
+    def run_conet(self):
         """
         Runs a Bash script containing the CoNet Bash commands.
         Unfortunately, errors produced by CoNet cannot be caught,
         because the exit status of the script is 0 regardless
         of CoNet producing a network or not.
         """
-        if settings is None:
-            path = os.path.dirname(massoc.__file__) + '\\execs\\CoNet.sh'
-            path = path.replace('\\', '/')
-        else:
-            path = settings[0]
-            if path[-2:] is not 'sh':
-                raise ValueError("Please supply an edited Shell script to run CoNet.")
+        path = os.path.dirname(massoc.__file__) + '\\execs\\CoNet.sh'
+        path = path.replace('\\', '/')
         libpath = self.inputs['conet'][0] + '\\lib\\CoNet.jar'
         libpath = libpath.replace('\\', '/')
         filenames = self.get_filenames()
-        fn = '\n'.join("{!s}={!r}".format(key, val) for (key, val) in filenames.items())
-        self.log['CoNet_start'] = datetime.now().strftime('%B %d %Y %H:%M:%S')
         for x in filenames:
             try:
                 graphname = filenames[x][:-5] + '_conet.tsv'
-                tempname = filenames[x][:-5] + '_otus_conet.txt'
-                taxname = filenames[x][:-5] + '_tax_conet.txt'
+                tempname = filenames[x][:-5] + '_counts_conet.txt'
                 file = biom.load_table(filenames[x])
+                # code below is necessary to fix an issue where CoNet cannot read numerical OTU ids
+                orig_ids = dict()
+                for i in range(len(file.ids(axis='observation'))):
+                    id = file.ids(axis='observation')[i]
+                    orig_ids[("otu-" + str(i))] = id
+                    file.ids(axis='observation')[i] = "otu_" + str(i)
                 otu = file.to_tsv()
                 text_file = open(tempname, 'w')
                 text_file.write(otu[34:])
                 text_file.close()
-                tax = file._observation_metadata
-                for species in tax:
-                    species.pop('Genus (Aggregated)', None)
-                    species.pop('collapsed_ids', None)
-                tax = file.metadata_to_dataframe('observation')
-                num = tax.shape[1]
-                for i in range(num, 7):
-                    level = 'taxonomy_' + str(i)
-                    tax[level] = 'Merged'
-                tax.to_csv(taxname, sep="\t")
-                f = open(taxname, 'r')
-                lines = f.read()
-                f.close()
-                lines = 'id' + lines
-                f = open(taxname, 'w')
-                f.write(lines)
-                f.close()
+                # Code below removed because taxonomic information is not necessary
+                # tax = file._observation_metadata
+                # for species in tax:
+                #    species.pop('Genus (Aggregated)', None)
+                #    species.pop('collapsed_ids', None)
+                # tax = file.metadata_to_dataframe('observation')
+                # num = tax.shape[1]
+                # for i in range(num, 7):
+                #    level = 'taxonomy_' + str(i)
+                #    tax[level] = 'Merged'
+                #tax.to_csv(taxname, sep="\t")
+                #f = open(taxname, 'r')
+                #lines = f.read()
+                #f.close()
+                #lines = 'id' + lines
+                #f = open(taxname, 'w')
+                #f.write(lines)
+                #f.close()
                 # solving issue where guessingparam is higher than maximum edge number
                 n_otus = file.shape[0]
                 guessingparam = str(n_otus * n_otus -1)
                 if int(guessingparam) > 1000:
                     guessingparam = str(1000)
-                cmd = path + ' ' + tempname + ' ' + taxname + ' ' + graphname + ' ' + libpath + \
+                cmd = path + ' ' + tempname + ' ' + ' ' + graphname + ' ' + libpath + \
                       ' ' + filenames[x][:-5] + ' ' + guessingparam
                 call(cmd, shell=True)
-                call("rm " + tempname + " " + taxname + " " + filenames[x][:-5] + "_threshold" + " " +
+                call("rm " + tempname + " " + " " + filenames[x][:-5] + "_threshold" + " " +
                     filenames[x][:-5] + "_permnet")
                 with open(graphname, 'r') as fin:
                     data = fin.read().splitlines(True)
@@ -297,13 +292,16 @@ class Nets(Batch):
                 # methods = [x[2] for x in csv.reader(open(graphname, 'r'), delimiter='\t')]
                 names = [x[15] for x in csv.reader(open(graphname, 'r'), delimiter='\t')]
                 names = [x.split('->') for x in names]
+                new_names = list()
+                for item in names:
+                    new_item = [x.replace(x, orig_ids[x]) for x in item]
+                    new_names.append(new_item)
+                file = biom.load_table(filenames[x])
                 i = 0
                 allspecies = file._observation_ids
-                allspecies = [x.replace(' ', '-') for x in allspecies]
-                allspecies = [x.replace('_', '-') for x in allspecies]
                 adj = pandas.DataFrame(index=allspecies, columns=allspecies)
                 adj = adj.fillna(0)
-                for name in names:
+                for name in new_names:
                     id1 = adj.columns.get_loc(name[0])
                     id2 = adj.columns.get_loc(name[1])
                     sign = signs[i]
@@ -312,9 +310,8 @@ class Nets(Batch):
                     adj.iloc[id2, id1] = sign
                 net = networkx.from_pandas_adjacency(adj)
                 net = _add_tax(net, filenames[x])
-                self.networks[(x + "_conet")] = net
+                self.networks[("conet_" + x)] = net
                 call ("rm " + graphname)
-                self.log['CoNet_finish'] = datetime.now().strftime('%B %d %Y %H:%M:%S')
             except Exception:
                 logger.error("Unable to finish CoNet on " + str(x), exc_info=True)
 
@@ -324,10 +321,37 @@ class Nets(Batch):
         """
         try:
             for network in self.networks:
-                path = self.inputs['fp'][0] + '/' + network + '.xml'
-                networkx.write_gml(G=self.networks[network], path=path)
+                # have to make sure there are no spaces in the OTU names
+                path = self.inputs['fp'][0] + '/' + network + '.txt'
+                networkx.write_weighted_edgelist(G=self.networks[network], path=path)
         except Exception:
             logger.error("Unable to write networks to XML files", exc_info=True)
+
+    def add_networks(self):
+        """
+        In case users want to manually import a network,
+        this function adds the network file to the Nets object and checks
+        whether the identifiers specified in the file match those in included BIOM files.
+        Currently, only edge lists are supported.
+        """
+        filename = self.inputs['network']['filename']
+        filetype = self.inputs['network']['filetype']
+        if filetype == 'weighted':
+            network = networkx.read_weighted_edgelist(filename)
+        if filetype == 'unweighted':
+            network = networkx.read_edgelist(filename)
+        try:
+            network_nodes = list(network.nodes)
+        except TypeError:
+            logger.error("Unable to read edge list.")
+        taxon_ids = list()
+        for biomfile in self.otu:
+            taxon_ids.extend(list(self.otu[biomfile].ids(axis='observation')))
+        missing_node = any(x not in taxon_ids for x in network_nodes)
+        if missing_node:
+            logger.error("Imported network node not found in taxon identifiers.")
+        else:
+            self.network[filename] = network
 
 
 def _add_tax(network, file):
@@ -335,23 +359,27 @@ def _add_tax(network, file):
     Adds taxon names from filename.
     """
     file = biom.load_table(file)
-    tax = file._observation_metadata
+    tax = file.metadata(axis='observation')
+    otu_ids = file.ids(axis='observation')
+    taxnames = ['Kingdom', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species']
+    clean_tax = dict()
+    for name in taxnames:
+        clean_tax[name] = dict()
     try:
         if tax is not None:
-            for species in tax:
+            for otu_id in otu_ids:
+                id = file.index(otu_id, axis='observation')
+                species = tax[id]
                 species.pop('Genus (Aggregated)', None)
                 species.pop('collapsed_ids', None)
-            tax = file.metadata_to_dataframe('observation')
-            taxnames = ['Kingdom', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species']
-            taxdict = {}
-            i = 0
-            for name in tax.columns:
-                taxdict[name] = taxnames[i]
-                i = i + 1
-            tax = tax.rename(index=str, columns=taxdict)
-            for column in tax.columns:
-                taxdict = tax[column].to_dict()
-                networkx.set_node_attributes(network, values=taxdict, name=column)
+                # the metadata_to_dataframe cannot handle None vars
+                for key in species:
+                    if species[key] == None:
+                        species[key] = 'NA'
+                for i in range(0, len(species['taxonomy'])):
+                    clean_tax[taxnames[i]][otu_id] = species['taxonomy'][i]
+            for level in clean_tax:
+                networkx.set_node_attributes(network, values=clean_tax[level], name=level)
     except Exception:
-        logger.error("Unable to collect taxonomy for agglomerated files" + str(x), exc_info=True)
+        logger.error("Unable to collect taxonomy for agglomerated files", exc_info=True)
     return network

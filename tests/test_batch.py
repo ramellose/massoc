@@ -8,9 +8,10 @@ agglomerated files.
 
 import unittest
 from copy import deepcopy
-
+import os
 import biom
 import numpy as np
+import massoc
 
 from massoc.scripts.batch import Batch
 
@@ -143,39 +144,6 @@ class TestBatch(unittest.TestCase):
         batch.split_biom()
         self.assertEqual(len(batch.otu), 3)
 
-    def test_split_biom_errors(self):
-        """Does 'split_biom' correctly raise
-        an error if wrong vars are supplied?"""
-        inputs = {'biom_file': None,
-                  'cluster': ['Affinity'],
-                  'nclust': ['4'],
-                  'otu_meta': None,
-                  'otu_table': ['otu_bananas.txt'],
-                  'prefix': None,
-                  'sample_data': None,
-                  'split': ['Rocket Science'],
-                  'tax_table': ['tax_bananas.txt']}
-        batch = Batch(testbiom, inputs)
-        with self.assertRaises(ValueError):
-            batch.split_biom()
-
-    def test_log_appending(self):
-        """Check if the log class variable is
-        adjusted correctly when a modification of
-        the Batch class is made."""
-        inputs = {'biom_file': None,
-                  'cluster': ['K-means'],
-                  'nclust': ['4'],
-                  'otu_meta': None,
-                  'otu_table': ['otu_bananas.txt'],
-                  'prefix': None,
-                  'sample_data': None,
-                  'split': ['TRUE'],
-                  'tax_table': ['tax_bananas.txt']}
-        batch = Batch(deepcopy(testbiom), inputs)
-        batch.cluster_biom()
-        self.assertEqual(len(batch.log.split('\n')), 4)
-
     def test_prev_filter(self):
         """Does the prevalence filter correctly
         reduce the number of taxa in a table?"""
@@ -204,7 +172,7 @@ class TestBatch(unittest.TestCase):
                   'sample_data': None,
                   'split': ['BODY_SITE'],
                   'tax_table': ['tax_bananas.txt'],
-                  'fp': ['C:/Users/u0118219/Documents/test'],
+                  'fp': [(os.path.dirname(massoc.__file__)[:-6] + 'tests')],
                   'name': ['test']}
         batch = Batch(testbiom, inputs)
         batch.collapse_tax()
@@ -242,23 +210,6 @@ class TestBatch(unittest.TestCase):
         batch.cluster_biom()
         self.assertEqual(len(batch.otu), 3)
 
-    def test_cluster_bioms_dbscan(self):
-        """Does 'cluster_bioms.py' correctly cluster
-        a biom file and split the file into multiple
-        subsets of the data?"""
-        inputs = {'biom_file': None,
-                  'cluster': ['DBSCAN'],
-                  'otu_meta': None,
-                  'nclust': ['4'],
-                  'otu_table': ['otu_bananas.txt'],
-                  'prefix': None,
-                  'sample_data': None,
-                  'split': None,
-                  'tax_table': ['tax_bananas.txt']}
-        batch = Batch(deepcopy(testbiom), inputs)
-        with self.assertRaises(ValueError):
-            batch.cluster_biom()
-
     def test_cluster_bioms_gaussian(self):
         """Does 'cluster_bioms.py' correctly cluster
         a biom file and split the file into multiple
@@ -293,24 +244,6 @@ class TestBatch(unittest.TestCase):
         np.random.seed(8888)
         batch.cluster_biom()
         self.assertEqual(len(batch.otu), 4)
-
-    def test_cluster_bioms_affinity(self):
-        """Does 'cluster_bioms.py' correctly raise an error
-        when the test biom file does not result in
-        a good enough silhouette score?"""
-        inputs = {'biom_file': None,
-                  'cluster': 'Affinity',
-                  'otu_meta': None,
-                  'nclust': ['4'],
-                  'otu_table': ['otu_bananas.txt'],
-                  'prefix': None,
-                  'sample_data': None,
-                  'split': None,
-                  'tax_table': ['tax_bananas.txt']}
-        batch = Batch(testbiom, inputs)
-        np.random.seed(8888)
-        with self.assertRaises(ValueError):
-            batch.cluster_biom()
 
     def test_norm_machine(self):
         """While data is normalized in the machine
@@ -368,7 +301,7 @@ class TestBatch(unittest.TestCase):
         rawsums = batch.otu['test'].sum(axis='observation')
         batch.prev_filter(mode='min')
         newsums = batch.otu['test'].sum(axis='observation')
-        self.assertEqual((rawsums[0] + rawsums[4]), newsums[4])
+        self.assertEqual((rawsums[0] + rawsums[4]), newsums[3])
 
     def test_prev_filter_qual(self):
         """Does the prevalence filter remove the correct taxon?"""
