@@ -25,7 +25,7 @@ from massoc.GUI.process import ProcessPanel
 from massoc.GUI.network import NetworkPanel
 from massoc.GUI.database import DataPanel
 from massoc.scripts.main import general_settings
-
+import multiprocessing
 # source: https://stackoverflow.com/questions/4004353/logging-strategy-for-gui-program
 import logging
 import logging.handlers as handlers
@@ -87,6 +87,7 @@ class BuildFrame(wx.Frame):
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     app = wx.App(False)
     frame = BuildFrame()
     app.MainLoop()

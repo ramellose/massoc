@@ -4281,3 +4281,145 @@ Traceback (most recent call last):
   File "C:\Users\u0118219\AppData\Roaming\Python\Python36\site-packages\networkx\readwrite\gml.py", line 704, in stringize
     raise NetworkXError('%r is not a string' % (value,))
 networkx.exception.NetworkXError: None is not a string
+2018-08-10 22:18:58,212 root         ERROR    Failed to generate workers
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 431, in run_parallel
+    results = pool.map(func, iter(jobs))
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 266, in map
+    return self._map_async(func, iterable, mapstar, chunksize).get()
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 644, in get
+    raise self._value
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 424, in _handle_tasks
+    put(task)
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\reduction.py", line 51, in dumps
+    cls(buf, protocol).dump(obj)
+AttributeError: Can't pickle local object 'Table._cast_metadata.<locals>.cast_metadata.<locals>.<lambda>'
+2018-08-10 22:18:58,212 root         ERROR    Failed to generate workers
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 431, in run_parallel
+    results = pool.map(func, iter(jobs))
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 266, in map
+    return self._map_async(func, iterable, mapstar, chunksize).get()
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 644, in get
+    raise self._value
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 424, in _handle_tasks
+    put(task)
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\reduction.py", line 51, in dumps
+    cls(buf, protocol).dump(obj)
+AttributeError: Can't pickle local object 'Table._cast_metadata.<locals>.cast_metadata.<locals>.<lambda>'
+2018-08-10 22:18:58,215 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 614, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 434, in run_parallel
+    nets.networks = results[0]
+UnboundLocalError: local variable 'results' referenced before assignment
+2018-08-10 22:18:58,215 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 614, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 434, in run_parallel
+    nets.networks = results[0]
+UnboundLocalError: local variable 'results' referenced before assignment
+2018-08-10 22:20:21,381 root         ERROR    Failed to generate workers
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 431, in run_parallel
+    results = pool.map(func, iter(jobs))
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 266, in map
+    return self._map_async(func, iterable, mapstar, chunksize).get()
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 644, in get
+    raise self._value
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 424, in _handle_tasks
+    put(task)
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\reduction.py", line 51, in dumps
+    cls(buf, protocol).dump(obj)
+AttributeError: Can't pickle local object 'Table._cast_metadata.<locals>.cast_metadata.<locals>.<lambda>'
+2018-08-10 22:20:21,381 root         ERROR    Failed to generate workers
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 431, in run_parallel
+    results = pool.map(func, iter(jobs))
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 266, in map
+    return self._map_async(func, iterable, mapstar, chunksize).get()
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 644, in get
+    raise self._value
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 424, in _handle_tasks
+    put(task)
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\reduction.py", line 51, in dumps
+    cls(buf, protocol).dump(obj)
+AttributeError: Can't pickle local object 'Table._cast_metadata.<locals>.cast_metadata.<locals>.<lambda>'
+2018-08-10 22:20:21,384 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 614, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 434, in run_parallel
+    nets.networks = results[0]
+UnboundLocalError: local variable 'results' referenced before assignment
+2018-08-10 22:20:21,384 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 614, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 434, in run_parallel
+    nets.networks = results[0]
+UnboundLocalError: local variable 'results' referenced before assignment
+2018-08-10 22:23:21,513 root         ERROR    Unable to load settings
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\process.py", line 355, in load_settings_proc
+    self.rar_number.SetValue(rar)
+TypeError: TextEntry.SetValue(): argument 1 has unexpected type 'int'
+2018-08-10 22:23:21,513 root         ERROR    Unable to load settings
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\process.py", line 355, in load_settings_proc
+    self.rar_number.SetValue(rar)
+TypeError: TextEntry.SetValue(): argument 1 has unexpected type 'int'
+2018-08-10 22:23:35,043 root         ERROR    Failed to generate workers
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 433, in run_parallel
+    results = pool.map(func, iter(jobs))
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 266, in map
+    return self._map_async(func, iterable, mapstar, chunksize).get()
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 644, in get
+    raise self._value
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 424, in _handle_tasks
+    put(task)
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\reduction.py", line 51, in dumps
+    cls(buf, protocol).dump(obj)
+AttributeError: Can't pickle local object 'Table._cast_metadata.<locals>.cast_metadata.<locals>.<lambda>'
+2018-08-10 22:23:35,043 root         ERROR    Failed to generate workers
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 433, in run_parallel
+    results = pool.map(func, iter(jobs))
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 266, in map
+    return self._map_async(func, iterable, mapstar, chunksize).get()
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 644, in get
+    raise self._value
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\pool.py", line 424, in _handle_tasks
+    put(task)
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "C:\Users\u0118219\AppData\Local\Programs\Python\Python36\lib\multiprocessing\reduction.py", line 51, in dumps
+    cls(buf, protocol).dump(obj)
+AttributeError: Can't pickle local object 'Table._cast_metadata.<locals>.cast_metadata.<locals>.<lambda>'
+2018-08-10 22:23:35,046 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 614, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 436, in run_parallel
+    nets.networks = results[0]
+UnboundLocalError: local variable 'results' referenced before assignment
+2018-08-10 22:23:35,046 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 614, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 436, in run_parallel
+    nets.networks = results[0]
+UnboundLocalError: local variable 'results' referenced before assignment

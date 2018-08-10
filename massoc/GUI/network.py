@@ -28,7 +28,7 @@ import logging
 import logging.handlers as handlers
 logger = logging.getLogger()
 logger.setLevel(logging.WARNING)
-
+import multiprocessing
 
 class NetworkPanel(wx.Panel):
     def __init__(self, parent):

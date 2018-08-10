@@ -230,6 +230,7 @@ class Nets(Batch):
         libpath = self.inputs['conet'][0] + '\\lib\\CoNet.jar'
         libpath = libpath.replace('\\', '/')
         filenames = self.get_filenames()
+        fn = '\n'.join("{!s}={!r}".format(key, val) for (key, val) in filenames.items())
         for x in filenames:
             try:
                 graphname = filenames[x][:-5] + '_conet.tsv'
@@ -321,7 +322,6 @@ class Nets(Batch):
         """
         try:
             for network in self.networks:
-                # have to make sure there are no spaces in the OTU names
                 path = self.inputs['fp'][0] + '/' + network + '.txt'
                 networkx.write_weighted_edgelist(G=self.networks[network], path=path)
         except Exception:
@@ -359,27 +359,23 @@ def _add_tax(network, file):
     Adds taxon names from filename.
     """
     file = biom.load_table(file)
-    tax = file.metadata(axis='observation')
-    otu_ids = file.ids(axis='observation')
-    taxnames = ['Kingdom', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species']
-    clean_tax = dict()
-    for name in taxnames:
-        clean_tax[name] = dict()
+    tax = file._observation_metadata
     try:
         if tax is not None:
-            for otu_id in otu_ids:
-                id = file.index(otu_id, axis='observation')
-                species = tax[id]
+            for species in tax:
                 species.pop('Genus (Aggregated)', None)
                 species.pop('collapsed_ids', None)
-                # the metadata_to_dataframe cannot handle None vars
-                for key in species:
-                    if species[key] == None:
-                        species[key] = 'NA'
-                for i in range(0, len(species['taxonomy'])):
-                    clean_tax[taxnames[i]][otu_id] = species['taxonomy'][i]
-            for level in clean_tax:
-                networkx.set_node_attributes(network, values=clean_tax[level], name=level)
+            tax = file.metadata_to_dataframe('observation')
+            taxnames = ['Kingdom', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species']
+            taxdict = {}
+            i = 0
+            for name in tax.columns:
+                taxdict[name] = taxnames[i]
+                i = i + 1
+            tax = tax.rename(index=str, columns=taxdict)
+            for column in tax.columns:
+                taxdict = tax[column].to_dict()
+                networkx.set_node_attributes(network, values=taxdict, name=column)
     except Exception:
         logger.error("Unable to collect taxonomy for agglomerated files", exc_info=True)
     return network

@@ -586,3 +586,8 @@ def data_starter(inputs):
         logger.error("Unable to upload network files to Neo4j database.", exc_info=True)
     pub.sendMessage('update', msg='Completed database operations!')
     pub.sendMessage('database_log', msg=checks)
+
+
+if __name__ == "__main__":
+    app = wx.App(False)
+    app.MainLoop()

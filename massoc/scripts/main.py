@@ -19,13 +19,11 @@ from functools import partial
 import os
 from biom import load_table
 from biom.parse import MetadataMap
-from massoc.scripts.netwrap import Nets
 from multiprocess import Pool
+import multiprocessing
 from massoc.scripts.batch import Batch
 import massoc
 from subprocess import call
-import numpy as np
-import networkx as nx
 from copy import deepcopy
 
 import logging
@@ -322,7 +320,7 @@ def combine_data(inputs):
         sys.stdout.write('Setting prevalence filter...')
         sys.stdout.flush()
         bioms.prev_filter(mode='prev')
-    bioms = Nets(bioms)
+    bioms = massoc.scripts.netwrap.Nets(bioms)
     return bioms
 
 def run_jobs(nets, job):
@@ -394,11 +392,15 @@ def run_parallel(nets):
     if nets.inputs['cores'] is not None:
         cores = int(nets.inputs['cores'][0])
     try:
+        sys.stdout.write('Writing files to disk...')
+        sys.stdout.flush()
         nets.write_bioms()
     except Exception:
         logger.error('Could not write ' + str(nets.inputs['name'][0]) + ' to disk', exc_info=True)
     pool = Pool(cores)
     jobs = get_joblist(nets)
+    sys.stdout.write('Collecting jobs...')
+    sys.stdout.flush()
     for item in jobs:
         for key in item.keys():
             if key == 'conet':
@@ -423,6 +425,8 @@ def run_parallel(nets):
                 nets.log['spiec-easi']['level'] = item[key]
     func = partial(run_jobs, nets)
     try:
+        sys.stdout.write('Distributing jobs...')
+        sys.stdout.flush()
         results = pool.map(func, iter(jobs))
     except Exception:
         logger.error('Failed to generate workers', exc_info=True)
@@ -433,6 +437,8 @@ def run_parallel(nets):
     for i in range(1, len(jobs)):
         nets.networks = {**nets.networks, **results[i]}
     # clean up old written BIOM files
+    sys.stdout.write('Cleaning up old files...')
+    sys.stdout.flush()
     for x in nets.inputs['name']:
         filename = nets.inputs['fp'][0] + '/' + x + '_otu.hdf5'
         call("rm " + filename)
@@ -449,6 +455,8 @@ def run_parallel(nets):
             call("rm " + filename)
             filename = nets.inputs['fp'][0] + '/' + x + '_phylum.hdf5'
             call("rm " + filename)
+    sys.stdout.write('Completed tasks!')
+    sys.stdout.flush()
     return(nets)
 
 
@@ -468,5 +476,6 @@ def run_massoc(settings, mode='write'):
 
 
 if __name__ == '__main__':
+    multiprocessing.freeze_support()
     options = get_input(sys.argv[1:])
     run_massoc(vars(options))
