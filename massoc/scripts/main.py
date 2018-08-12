@@ -332,17 +332,18 @@ def run_jobs(nets, job):
         sys.stdout.write('Running SPIEC-EASI...')
         sys.stdout.flush()
         nets.run_spiec()
-    if 'spar' in job:
+    if 'sparcc' in job:
         sys.stdout.write('Running SparCC...')
         sys.stdout.flush()
-        if len(job['spar_setting'][1]) == 2:
-            nets.run_spar(boots=job['spar_setting'][1]['spar_boot'], pval_threshold=job['spar_setting'][1]['spar_pval'])
+        if 'spar_setting' in job['sparcc']:
+            if len(job['spar_setting'][1]) == 2:
+                nets.run_spar(boots=job['spar_setting'][1]['spar_boot'], pval_threshold=job['spar_setting'][1]['spar_pval'])
+            else:
+                if 'spar_boot' in job['spar_setting'][1]:
+                    nets.run_spar(boots=job['spar_setting'][1]['spar_boot'])
+                if 'spar_pval' in job['spar_setting'][1]:
+                    nets.run_spar(pval_threshold=job['spar_setting'][1]['spar_pval'])
         else:
-            if 'spar_boot' in job['spar_setting'][1]:
-                nets.run_spar(boots=job['spar_setting'][1]['spar_boot'])
-            if 'spar_pval' in job['spar_setting'][1]:
-                nets.run_spar(pval_threshold=job['spar_setting'][1]['spar_pval'])
-        if 'spar_setting' not in job:
             nets.run_spar()
     if 'conet' in job:
         sys.stdout.write('Running CoNet...')
@@ -397,7 +398,6 @@ def run_parallel(nets):
         nets.write_bioms()
     except Exception:
         logger.error('Could not write ' + str(nets.inputs['name'][0]) + ' to disk', exc_info=True)
-    pool = Pool(cores)
     jobs = get_joblist(nets)
     sys.stdout.write('Collecting jobs...')
     sys.stdout.flush()
@@ -405,11 +405,11 @@ def run_parallel(nets):
         for key in item.keys():
             if key == 'conet':
                 # copies CoNet script path
-                path = os.path.dirname(massoc.__file__) + '\\execs\\CoNet.sh'
+                path = resource_path('CoNet.sh')
                 path = path.replace('\\', '/')
                 nets.log['conet'] = {'path': path}
                 nets.log['conet']['level'] = item[key]
-            if key == 'sparcc':
+            if key == 'spar':
                 nets.log['sparcc'] = {'bootstraps': 100, 'pvalue': 0.001}
                 nets.log['sparcc']['level'] = item[key]
             if nets.inputs['spar_boot'] is not None:
@@ -417,44 +417,54 @@ def run_parallel(nets):
             if nets.inputs['spar_pval'] is not None:
                 nets.log['sparcc']['pvalue'] = nets.inputs['spar_pval']
             if key == 'spiec-easi':
-                path = os.path.dirname(massoc.__file__) + '\\execs\\spieceasi.r'
+                path = resource_path('spieceasi.r')
                 path = path.replace('\\', '/')
                 file = open(path, 'r')
                 txt = file.read().splitlines()
                 nets.log['spiec-easi'] = {'method': txt[31], 'stars': txt[33][-36:]}
                 nets.log['spiec-easi']['level'] = item[key]
-    func = partial(run_jobs, nets)
+    # func = partial(run_jobs, nets)
+    # pool = Pool(cores)
+    # multiprocess supports passing objects
+    # multiprocessing does not
+    # however, multiprocess cannot be frozen
+    # need to rewrite netwrap as pickle-able objects!
     try:
         sys.stdout.write('Distributing jobs...')
         sys.stdout.flush()
-        results = pool.map(func, iter(jobs))
+        network_list = list()
+        for job in jobs:
+            result = run_jobs(nets, job)
+            network_list.append(result)
+        # results = pool.map(func, iter(jobs))
     except Exception:
         logger.error('Failed to generate workers', exc_info=True)
-    nets.networks = results[0]
+    for item in network_list:
+        nets.networks[list(item.keys())[0]] = item[list(item.keys())[0]]
     logfile = open(resource_path("massoc.log"), 'r')
     logtext = logfile.read()
     logfile.close()
-    for i in range(1, len(jobs)):
-        nets.networks = {**nets.networks, **results[i]}
+    # for i in range(1, len(jobs)):
+    #    nets.networks = {**nets.networks, **results[i]}
     # clean up old written BIOM files
     sys.stdout.write('Cleaning up old files...')
     sys.stdout.flush()
     for x in nets.inputs['name']:
         filename = nets.inputs['fp'][0] + '/' + x + '_otu.hdf5'
-        call("rm " + filename)
+        call("rm " + filename, shell=True)
         if len(nets.genus) != 0:
             filename = nets.inputs['fp'][0] + '/' + x + '_species.hdf5'
-            call("rm " + filename)
+            call("rm " + filename, shell=True)
             filename = nets.inputs['fp'][0] + '/' + x + '_genus.hdf5'
-            call("rm " + filename)
+            call("rm " + filename, shell=True)
             filename = nets.inputs['fp'][0] + '/' + x + '_family.hdf5'
-            call("rm " + filename)
+            call("rm " + filename, shell=True)
             filename = nets.inputs['fp'][0] + '/' + x + '_order.hdf5'
-            call("rm " + filename)
+            call("rm " + filename, shell=True)
             filename = nets.inputs['fp'][0] + '/' + x + '_class.hdf5'
-            call("rm " + filename)
+            call("rm " + filename, shell=True)
             filename = nets.inputs['fp'][0] + '/' + x + '_phylum.hdf5'
-            call("rm " + filename)
+            call("rm " + filename, shell=True)
     sys.stdout.write('Completed tasks!')
     sys.stdout.flush()
     return(nets)

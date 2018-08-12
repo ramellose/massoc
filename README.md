@@ -2,6 +2,19 @@
 
 A platform for inference and analysis of microbial association networks. V0.1.0.
 
+Currently, the following features are available:
+* Preprocessing of count files for network inference
+* Clustering + splitting files by sample properties
+* Batch network inference
+* Network + BIOM file storage in a graph database
+* Multi-network logic operations
+* Taxonomy-dependent edge agglomeration
+More features are currently under construction.
+
+Welcome to <i>massoc</i>! Contact the author at lisa.rottjers (at) kuleuven.be. Your feedback is much appreciated!
+Currently, you are using massoc 0.1. This version is still in early alpha. Encountering bugs is highly likely!
+
+
 ## Getting Started
 
 To run <i>massoc</i>, you only need to run the appropriate executable for your platform.

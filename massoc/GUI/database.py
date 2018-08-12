@@ -385,7 +385,6 @@ class DataPanel(wx.Panel):
         pub.sendMessage('update_settings', msg=settings)
 
     def run_database(self, event):
-        print(self.settings)
         try:
             eg = Thread(target=data_worker, args=(self.settings,))
             eg.start()

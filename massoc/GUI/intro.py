@@ -73,7 +73,7 @@ Currently, the following features are available:
 <ul>
 <li>Preprocessing of count files for network inference</li>
 <li>Clustering + splitting files by sample properties</li>
-<li>Batch network inference (in parallel)</li>
+<li>Batch network inference</li>
 <li>Network + BIOM file storage in a graph database </li>
 <li>Multi-network logic operations</li>
 <li>Taxonomy-dependent edge agglomeration</li>

@@ -52,7 +52,7 @@ import pandas
 from copy import deepcopy
 import massoc.execs
 from massoc.scripts.batch import Batch
-
+from massoc.scripts.main import resource_path
 import logging
 import logging.handlers as handlers
 logger = logging.getLogger()
@@ -138,7 +138,7 @@ class Nets(Batch):
         Runs a R executable containing settings for SPIEC-EASI network inference.
         """
         if settings is None:
-            path = os.path.dirname(massoc.__file__) + '\\execs\\spieceasi.r'
+            path = resource_path('spieceasi.r')
             path = path.replace('\\', '/')
         else:
             path = settings[0]
@@ -149,7 +149,7 @@ class Nets(Batch):
             try:
                 graphname = filenames[x][:-5] + '_spiec'
                 cmd = "Rscript " + path + " -i " + filenames[x] + " -o " + graphname
-                call(cmd)
+                call(cmd, shell=True)
                 corrtab = pandas.read_csv(graphname, sep='\t', index_col=0)
                 corrtab.columns = corrtab.index
                 corrtab[corrtab > 0] = 1
@@ -157,7 +157,7 @@ class Nets(Batch):
                 net = networkx.from_pandas_adjacency(corrtab)
                 net = _add_tax(net, filenames[x])
                 self.networks[("spiec-easi_" + x)] = net
-                call("rm " + graphname)
+                call("rm " + graphname, shell=True)
             except Exception:
                 logger.error("Unable to finish SPIEC-EASI on " + str(x), exc_info=True)
 
@@ -185,24 +185,24 @@ class Nets(Batch):
                 bootstraps = filenames[x][:-(5 + len(x))] + 'bootstraps'
                 cmd = "python2 " + path[0] + " " + tempname + " -i 5 " +\
                       " --cor_file " + corrs + " --cov_file " + cov
-                call(cmd)
-                call("mkdir " + bootstraps)
+                call(cmd, shell=True)
+                call("mkdir " + bootstraps, shell=True)
                 n_bootstraps = str(boots)
                 cmd = "python2 " + path[1] + " " + tempname + " -n " + n_bootstraps + \
                       " -t /permutation_#.txt -p " + bootstraps
-                call(cmd)
+                call(cmd, shell=True)
                 for i in range(0, int(n_bootstraps)):
                     permpath = bootstraps + '/permutation_' + str(i) + '.txt'
                     pvalpath = bootstraps + '/perm_cor_' + str(i) + '.txt'
                     cmd = "python2 " + path[0] + " " + permpath + " -i 5 " + \
                           " --cor_file " + pvalpath + " --cov_file " + cov
-                    call(cmd)
+                    call(cmd, shell=True)
                 cmd = "python2 " + path[2] + ' ' + corrs + ' ' + bootstraps + \
                       '/perm_cor_#.txt 5 -o ' + pvals + ' -t two_sided'
-                call(cmd)
-                call("rm -rf " + bootstraps)
-                call("rm " + tempname)
-                call("rm " + cov)
+                call(cmd, shell=True)
+                call("rm -rf " + bootstraps, shell=True)
+                call("rm " + tempname, shell=True)
+                call("rm " + cov, shell=True)
                 corrtab = pandas.read_csv(corrs, sep='\t', index_col=0)
                 corrtab.columns = corrtab.index
                 pvaltab = pandas.read_csv(pvals, sep='\t', index_col=0)
@@ -214,7 +214,9 @@ class Nets(Batch):
                 net = networkx.from_pandas_adjacency(corrtab)
                 net = _add_tax(net, filenames[x])
                 self.networks[("sparcc_" + x)] = net
-                call("rm " + corrs + " " + pvals + " " + os.path.dirname(massoc.__file__)[:-6] + "\cov_mat_SparCC.out")
+                call("rm " + corrs + " " + pvals +
+                     " " + os.path.dirname(massoc.__file__)[:-6] +
+                     "\cov_mat_SparCC.out", shell=True)
             except Exception:
                 logger.error("Unable to finish SparCC on " + str(x), exc_info=True)
 
@@ -225,12 +227,11 @@ class Nets(Batch):
         because the exit status of the script is 0 regardless
         of CoNet producing a network or not.
         """
-        path = os.path.dirname(massoc.__file__) + '\\execs\\CoNet.sh'
+        path = resource_path('CoNet.sh')
         path = path.replace('\\', '/')
         libpath = self.inputs['conet'][0] + '\\lib\\CoNet.jar'
         libpath = libpath.replace('\\', '/')
         filenames = self.get_filenames()
-        fn = '\n'.join("{!s}={!r}".format(key, val) for (key, val) in filenames.items())
         for x in filenames:
             try:
                 graphname = filenames[x][:-5] + '_conet.tsv'
@@ -273,7 +274,7 @@ class Nets(Batch):
                       ' ' + filenames[x][:-5] + ' ' + guessingparam
                 call(cmd, shell=True)
                 call("rm " + tempname + " " + " " + filenames[x][:-5] + "_threshold" + " " +
-                    filenames[x][:-5] + "_permnet")
+                    filenames[x][:-5] + "_permnet", shell=True)
                 with open(graphname, 'r') as fin:
                     data = fin.read().splitlines(True)
                     fin.close()
@@ -312,7 +313,7 @@ class Nets(Batch):
                 net = networkx.from_pandas_adjacency(adj)
                 net = _add_tax(net, filenames[x])
                 self.networks[("conet_" + x)] = net
-                call ("rm " + graphname)
+                call ("rm " + graphname, shell=True)
             except Exception:
                 logger.error("Unable to finish CoNet on " + str(x), exc_info=True)
 
