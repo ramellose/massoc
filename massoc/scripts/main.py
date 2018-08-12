@@ -19,7 +19,6 @@ from functools import partial
 import os
 from biom import load_table
 from biom.parse import MetadataMap
-from multiprocess import Pool
 import multiprocessing
 from massoc.scripts.batch import Batch
 import massoc

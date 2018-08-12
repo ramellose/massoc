@@ -50,7 +50,6 @@ import biom
 import networkx
 import pandas
 from copy import deepcopy
-import massoc.execs
 from massoc.scripts.batch import Batch
 from massoc.scripts.main import resource_path
 import logging
@@ -169,6 +168,7 @@ class Nets(Batch):
         path.append(self.inputs['spar'][0] + '\\SparCC.py')
         path.append(self.inputs['spar'][0] + '\\MakeBootstraps.py')
         path.append(self.inputs['spar'][0] + '\\PseudoPvals.py')
+        print(path)
         path = [x.replace('\\', '/') for x in path]
         filenames = self.get_filenames()
         for x in filenames:
@@ -179,6 +179,7 @@ class Nets(Batch):
                 text_file = open(tempname, 'w')
                 text_file.write(otu[29:])
                 text_file.close()
+                print(tempname)
                 corrs = filenames[x][:-5] + '_spar_corrs.tsv'
                 cov = filenames[x][:-5] + '_spar_cov.tsv'
                 pvals = filenames[x][:-5] + '_spar_pvals.tsv'
@@ -275,6 +276,7 @@ class Nets(Batch):
                 call(cmd, shell=True)
                 call("rm " + tempname + " " + " " + filenames[x][:-5] + "_threshold" + " " +
                     filenames[x][:-5] + "_permnet", shell=True)
+                print(graphname)
                 with open(graphname, 'r') as fin:
                     data = fin.read().splitlines(True)
                     fin.close()
