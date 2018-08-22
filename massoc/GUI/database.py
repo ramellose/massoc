@@ -22,7 +22,7 @@ from subprocess import Popen
 from massoc.scripts.main import resource_path
 from psutil import Process
 from time import sleep
-
+from platform import system
 import logging
 import logging.handlers as handlers
 logger = logging.getLogger()
@@ -142,19 +142,6 @@ class DataPanel(wx.Panel):
         self.rev_text = wx.StaticText(self, label='Current operations')
         self.review = wx.TextCtrl(self, value='', size=(boxsize[0], 300), style=wx.TE_READONLY | wx.TE_MULTILINE)
 
-        # export to cytoscape
-        self.export_txt = wx.StaticText(self, label='Export to Cytoscape-compatible GraphML format.')
-        self.export_box = wx.ListBox(self, choices=['Export network with samples',
-                                     'Export taxon-only network'], size=(boxsize[0], 40))
-        self.export_box.Bind(wx.EVT_MOTION, self.update_help)
-        self.export_box.Bind(wx.EVT_LISTBOX, self.export_setting)
-        self.export_name = wx.TextCtrl(self, value='filename', size=btnsize)
-        self.export_name.Bind(wx.EVT_TEXT, self.update_gml_name)
-        self.export_txt.Enable(False)
-        self.export_box.Enable(False)
-        self.export_name.Enable(False)
-
-
         # Run button
         self.go = wx.Button(self, label='Run database operations', size=(btnsize[0], 40))
         self.go.Bind(wx.EVT_BUTTON, self.run_database)
@@ -191,10 +178,6 @@ class DataPanel(wx.Panel):
         self.rightsizer.Add(self.logic_txt)
         self.rightsizer.Add(self.logic_choice)
         self.rightsizer.AddSpacer(20)
-        self.rightsizer.Add(self.export_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.rightsizer.Add(self.export_box, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.rightsizer.Add(self.export_name, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.rightsizer.AddSpacer(20)
         self.rightsizer.Add(self.go, flag=wx.ALIGN_CENTER)
         self.rightsizer.AddSpacer(20)
 
@@ -227,7 +210,6 @@ class DataPanel(wx.Panel):
                         self.assoc_box: "Taxa are linked to categorical variables through a hypergeometric test"
                                            " and to continous variables through Spearman's rank correlation.",
                         self.logic_choice: 'Find associations that are present in only one or all of your networks.',
-                        self.export_box: 'Exports a graph with samples as separate nodes or only with sample properties.',
                         self.go: 'Run the selected operations and export a GraphML file.'
                         }
 
@@ -273,11 +255,6 @@ class DataPanel(wx.Panel):
             self.password[0] = text
         self.send_settings()
 
-    def update_gml_name(self, event):
-        text = self.export_name.GetValue()
-        self.gml_name = list()
-        self.gml_name.append(text)
-        self.send_settings()
 
     def update_pid(self, msg):
         """Listener for Neo4j PID."""
@@ -288,10 +265,10 @@ class DataPanel(wx.Panel):
         try:
             eg = Thread(target=data_starter, args=(self.settings,))
             eg.start()
+            eg.join()
         except Exception:
             logger.error("Failed to initiate database", exc_info=True)
-        dlg = LoadingBar()
-        dlg.ShowModal()
+        # removed dlg.LoadingBar() dlg.ShowModal()
         self.tax_txt.Enable(True)
         self.tax_choice.Enable(True)
         self.tax_weight.Enable(True)
@@ -301,9 +278,6 @@ class DataPanel(wx.Panel):
         self.logic_txt.Enable(True)
         self.logic_choice.Enable(True)
         self.weight_txt.Enable(True)
-        self.export_txt.Enable(True)
-        self.export_box.Enable(True)
-        self.export_name.Enable(True)
 
     def close_database(self, event):
         try:
@@ -346,8 +320,11 @@ class DataPanel(wx.Panel):
 
     def run_association(self, event):
         self.assoc = list()
-        text = self.assoc_box.GetCheckedStrings()
-        self.assoc = list(text)
+        text = list()
+        ids = self.assoc_box.GetSelections()
+        for i in ids:
+            text.append(self.assoc_box.GetString(i))
+        self.assoc = text
         self.send_settings()
 
     def get_logic(self, event):
@@ -355,13 +332,6 @@ class DataPanel(wx.Panel):
         name = self.logic_choice.GetSelection()
         text = self.logic_choice.GetString(name)
         self.logic.append(text)
-        self.send_settings()
-
-    def export_setting(self, event):
-        self.export = list()
-        name = self.export_box.GetSelection()
-        text = self.export_box.GetString(name)
-        self.export.append(text)
         self.send_settings()
 
     def receive_meta(self, msg):
@@ -390,8 +360,7 @@ class DataPanel(wx.Panel):
             eg.start()
         except Exception:
             logger.error("Failed to start database worker", exc_info=True)
-        dlg = LoadingBar()
-        dlg.ShowModal()
+        # removed LoadingBar()
 
 
     def check_networks(self, msg):
@@ -515,13 +484,9 @@ def data_worker(inputs):
                 pairlist = statdriver.graph_intersection()
             if inputs['logic'][0] == 'Difference':
                 pairlist = statdriver.graph_difference()
-        export_mode = inputs['export'][0]
         filename = inputs['fp'][0] + '/' + inputs['gml_name'][0] + '.graphml'
         pub.sendMessage('update', msg="Exporting network...")
-        if export_mode == 'Export network with samples':
-            importdriver.export_network(path=filename, pairlist=pairlist, mode='sample')
-        if export_mode == 'Export taxon-only network':
-            importdriver.export_network(path=filename, pairlist=pairlist, mode='basic')
+        importdriver.export_network(path=filename, pairlist=pairlist, mode='basic')
         pub.sendMessage('update', msg="Completed database operations!")
     except Exception:
         logger.error("Failed to run database worker", exc_info=True)
@@ -542,9 +507,15 @@ def data_starter(inputs):
     try:
         pub.sendMessage('update', msg='Starting database.')
         # run database
-        filepath = inputs['neo4j'][0] + '/bin/neo4j.bat console'
+        if system() == 'Windows':
+            filepath = inputs['neo4j'][0] + '/bin/neo4j.bat console'
+        else:
+            filepath = inputs['neo4j'][0] + '/bin/neo4j console'
         filepath = filepath.replace("\\", "/")
-        p = Popen(filepath, shell=True)
+        if system() == 'Windows':
+            p = Popen(filepath, shell=True)
+        else:
+            p = Popen(["gnome-terminal", "-e", filepath])  # x-term compatible alternative terminal
         pub.sendMessage('pid', msg=p.pid)
     except Exception:
         logger.error("Failed to initiate database", exc_info=True)

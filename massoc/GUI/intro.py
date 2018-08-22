@@ -37,20 +37,14 @@ class IntroPanel(wx.Panel):
         self.ico = wx.StaticBitmap(self, -1, wx.Bitmap(resource_path("massoc_large.png"), wx.BITMAP_TYPE_ANY))
 
         self.menusizer = wx.BoxSizer(wx.VERTICAL)
-        self.menutitle = wx.StaticText(self, label="Documentation")
-        font1 = wx.Font(18, wx.DECORATIVE, wx.NORMAL, wx.BOLD)
-        self.menutitle.SetFont(font1)
-        self.doc_btn = wx.Button(self, label="Manual", size=btnsize)
-        self.doc_btn.Bind(wx.EVT_BUTTON, self.link_manual)
-        self.demo_btn = wx.Button(self, label="Demo", size=btnsize)
-        self.demo_btn.Bind(wx.EVT_BUTTON, self.link_demo)
+        self.doc_btn = wx.Button(self, label="Documentation", size=btnsize)
+        self.doc_btn.Bind(wx.EVT_BUTTON, self.link_docs)
+
 
         self.menusizer.AddSpacer(50)
         self.menusizer.Add(self.ico, 1, wx.ALIGN_CENTER_HORIZONTAL, 5)
         self.menusizer.AddSpacer(50)
-        self.menusizer.Add(self.menutitle, 1, wx.EXPAND | wx.ALIGN_CENTER_HORIZONTAL, 5)
         self.menusizer.Add(self.doc_btn, 1, wx.EXPAND, 5)
-        self.menusizer.Add(self.demo_btn, 1, wx.EXPAND, 5)
         self.menusizer.AddSpacer(300)
 
         self.leftsizer.AddSpacer(20)
@@ -60,13 +54,10 @@ class IntroPanel(wx.Panel):
         self.SetSizerAndFit(self.leftsizer)
 
     # write documentation in PDF and link
-    def link_manual(self, event):
-        url = "https://github.com/ramellose/massoc/raw/master/docs/massoc_manual.pdf"
+    def link_docs(self, event):
+        url = "https://github.com/ramellose/massoc/raw/master/docs"
         webbrowser.open(url)
 
-    def link_demo(self, event):
-        url = "https://github.com/ramellose/massoc/raw/master/docs/massoc_demo.pdf"
-        webbrowser.open(url)
 
 welcome="""<h2><em>massoc</em>,<br /> a platform for microbial associations.<br /></h2>
 Currently, the following features are available:

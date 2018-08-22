@@ -273,6 +273,7 @@ class Nets(Batch):
                     guessingparam = str(1000)
                 cmd = path + ' ' + tempname + ' ' + ' ' + graphname + ' ' + libpath + \
                       ' ' + filenames[x][:-5] + ' ' + guessingparam
+                print(cmd)
                 call(cmd, shell=True)
                 call("rm " + tempname + " " + " " + filenames[x][:-5] + "_threshold" + " " +
                     filenames[x][:-5] + "_permnet", shell=True)

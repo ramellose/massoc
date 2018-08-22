@@ -1,7 +1,7 @@
 numpy
 scipy
 h5py
-py2neo
+neo4j
 matplotlib
 networkx
 multiprocess

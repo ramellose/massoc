@@ -26,6 +26,7 @@ from massoc.GUI.network import NetworkPanel
 from massoc.GUI.database import DataPanel
 from massoc.scripts.main import general_settings
 import multiprocessing
+import biom
 # source: https://stackoverflow.com/questions/4004353/logging-strategy-for-gui-program
 import logging
 import logging.handlers as handlers
@@ -40,7 +41,7 @@ logger.setLevel(logging.WARNING)
 class BuildFrame(wx.Frame):
     """Constructor"""
     def __init__(self):
-        wx.Frame.__init__(self, None, title='massoc', size=(750, 700))
+        wx.Frame.__init__(self, None, title='massoc', size=(800, 700))
 
         ico = wx.Icon(resource_path("massoc.png"), wx.BITMAP_TYPE_PNG)
         self.SetIcon(ico)

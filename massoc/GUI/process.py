@@ -98,7 +98,7 @@ class ProcessPanel(wx.Panel):
 
         # set rarefaction
         self.rar_txt = wx.StaticText(self, label='Rarefy:')
-        self.rar_choice = wx.ListBox(self, choices=['To even depth', 'To count number'], size=(300, 40))
+        self.rar_choice = wx.ListBox(self, choices=['To even depth', 'To count number'], size=(300, 50))
         self.rar_choice.Bind(wx.EVT_LISTBOX, self.get_rarefaction)
         self.rar_choice.Bind(wx.EVT_MOTION, self.update_help)
         self.rar_number = wx.TextCtrl(self, value='', size=btnsize)
@@ -128,11 +128,11 @@ class ProcessPanel(wx.Panel):
 
         # select taxonomic levels
         self.tax_txt = wx.StaticText(self, label='Taxonomic levels to analyze')
-        self.tax_choice = wx.CheckListBox(self, choices=['OTU', 'Species', 'Genus',
+        self.tax_choice = wx.ListBox(self, choices=['OTU', 'Species', 'Genus',
                                                          'Family', 'Order', 'Class', 'Phylum'],
-                                          size=(boxsize[0], 130), style=wx.LB_MULTIPLE)
+                                          size=(boxsize[0], 150), style=wx.LB_MULTIPLE)
         self.tax_choice.Bind(wx.EVT_MOTION, self.update_help)
-        self.tax_choice.Bind(wx.EVT_CHECKLISTBOX, self.get_levels)
+        self.tax_choice.Bind(wx.EVT_LISTBOX, self.get_levels)
         self.tax_choice.Enable(False)
 
         sizer = wx.BoxSizer(wx.VERTICAL)
@@ -192,7 +192,8 @@ class ProcessPanel(wx.Panel):
                         self.min_number: 'Taxa with low mean counts can be removed if there are too many '
                                          'high-prevalence, '
                                          'low-abundance taxa.',
-                        self.file_list: 'Show taxon prevalence and counts per sample for imported count tables.'}
+                        self.file_list: 'Show taxon prevalence and counts per sample for imported count tables.',
+                        self.tax_choice: 'Select which taxonomic level to agglomerate to before network inference.'}
 
     def update_help(self, event):
         btn = event.GetEventObject()
@@ -254,7 +255,9 @@ class ProcessPanel(wx.Panel):
     def get_levels(self, event):
         text = list()
         try:
-            text = self.tax_choice.GetCheckedStrings()
+            ids = self.tax_choice.GetSelections()
+            for i in ids:
+                text.append(self.tax_choice.GetString(i))
             text = [x.lower() for x in text]
             self.agglom = text
         except KeyError:
@@ -330,8 +333,8 @@ class ProcessPanel(wx.Panel):
             self.prev_val.SetValue("")
             for cb in np.nditer(self.split_list.GetSelections):
                 self.split_list.Deselect(cb)
-            for cb in self.tax_choice.Checked:
-                self.tax_choice.Check(cb, False)
+            for cb in self.tax_choice.GetSelections:
+                self.tax_choice.Deselect(cb, False)
 
     def load_settings_proc(self, msg):
         """
@@ -370,7 +373,7 @@ class ProcessPanel(wx.Panel):
                               'family': 3, 'order': 4, 'class': 5,
                               'phylum': 6}
                 for tax in msg['levels']:
-                    self.tax_choice.Check(agglomdict[tax], True)
+                    self.tax_choice.SetSelection(agglomdict[tax], True)
         except Exception:
             logger.error("Unable to load settings", exc_info=True)
 
@@ -424,6 +427,8 @@ class ProcessPanel(wx.Panel):
             self.cluster_btn.Enable(False)
             self.tax_txt.Enable(False)
             self.tax_choice.Enable(False)
+
+
     def set_settings(self, msg):
         """
         Stores settings file as tab property so it can be read by save_settings.
@@ -529,7 +534,9 @@ class ClusterDialog(wx.Dialog):
             pass
         try:
             proc = self.cluster_proc.GetSelections()
-            text = self.cluster_proc.GetString(proc)
+            text = list()
+            for i in proc:
+                text.append(self.cluster_proc.GetString(i))
             if text is 'Split files':
                 self.split = list('TRUE')
         except KeyError:

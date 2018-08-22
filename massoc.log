@@ -4509,3 +4509,137 @@ Traceback (most recent call last):
   File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 442, in run_parallel
     nets.networks[list(item.keys())[0]] = item[list(item.keys())[0]]
 IndexError: list index out of range
+2018-08-22 10:39:10,325 root         ERROR    Unable to finish CoNet on test_otu
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\netwrap.py", line 301, in run_conet
+    new_item = [x.replace(x, orig_ids[x]) for x in item]
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\netwrap.py", line 301, in <listcomp>
+    new_item = [x.replace(x, orig_ids[x]) for x in item]
+KeyError: 'Pseudonocardia'
+2018-08-22 10:39:10,325 root         ERROR    Unable to finish CoNet on test_otu
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\netwrap.py", line 301, in run_conet
+    new_item = [x.replace(x, orig_ids[x]) for x in item]
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\netwrap.py", line 301, in <listcomp>
+    new_item = [x.replace(x, orig_ids[x]) for x in item]
+KeyError: 'Pseudonocardia'
+2018-08-22 10:39:10,327 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 617, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 442, in run_parallel
+    nets.networks[list(item.keys())[0]] = item[list(item.keys())[0]]
+IndexError: list index out of range
+2018-08-22 10:39:10,327 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 617, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 442, in run_parallel
+    nets.networks[list(item.keys())[0]] = item[list(item.keys())[0]]
+IndexError: list index out of range
+2018-08-22 13:52:14,052 root         ERROR    Failed to start worker thread
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 341, in run_network
+    WorkerThread()
+TypeError: __init__() missing 1 required positional argument: 'inputs'
+2018-08-22 13:52:14,052 root         ERROR    Failed to start worker thread
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 341, in run_network
+    WorkerThread()
+TypeError: __init__() missing 1 required positional argument: 'inputs'
+2018-08-22 13:57:39,548 root         ERROR    Unable to finish CoNet on test_otu
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\netwrap.py", line 280, in run_conet
+    with open(graphname, 'r') as fin:
+FileNotFoundError: [Errno 2] No such file or directory: 'C:/Users/u0118219/Documents/test_otu_conet.tsv'
+2018-08-22 13:57:39,548 root         ERROR    Unable to finish CoNet on test_otu
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\netwrap.py", line 280, in run_conet
+    with open(graphname, 'r') as fin:
+FileNotFoundError: [Errno 2] No such file or directory: 'C:/Users/u0118219/Documents/test_otu_conet.tsv'
+2018-08-22 13:57:39,549 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 618, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 442, in run_parallel
+    nets.networks[list(item.keys())[0]] = item[list(item.keys())[0]]
+IndexError: list index out of range
+2018-08-22 13:57:39,549 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 618, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 442, in run_parallel
+    nets.networks[list(item.keys())[0]] = item[list(item.keys())[0]]
+IndexError: list index out of range
+2018-08-22 14:02:45,076 root         ERROR    Unable to finish CoNet on test_otu
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\netwrap.py", line 280, in run_conet
+    with open(graphname, 'r') as fin:
+FileNotFoundError: [Errno 2] No such file or directory: 'C:/Users/u0118219/Documents/test_otu_conet.tsv'
+2018-08-22 14:02:45,076 root         ERROR    Unable to finish CoNet on test_otu
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\netwrap.py", line 280, in run_conet
+    with open(graphname, 'r') as fin:
+FileNotFoundError: [Errno 2] No such file or directory: 'C:/Users/u0118219/Documents/test_otu_conet.tsv'
+2018-08-22 14:02:45,077 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 618, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 442, in run_parallel
+    nets.networks[list(item.keys())[0]] = item[list(item.keys())[0]]
+IndexError: list index out of range
+2018-08-22 14:02:45,077 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 618, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 442, in run_parallel
+    nets.networks[list(item.keys())[0]] = item[list(item.keys())[0]]
+IndexError: list index out of range
+2018-08-22 14:13:31,399 root         ERROR    Unable to finish CoNet on test_otu
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\netwrap.py", line 280, in run_conet
+    with open(graphname, 'r') as fin:
+FileNotFoundError: [Errno 2] No such file or directory: 'C:/Users/u0118219/Documents/test_otu_conet.tsv'
+2018-08-22 14:13:31,399 root         ERROR    Unable to finish CoNet on test_otu
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\netwrap.py", line 280, in run_conet
+    with open(graphname, 'r') as fin:
+FileNotFoundError: [Errno 2] No such file or directory: 'C:/Users/u0118219/Documents/test_otu_conet.tsv'
+2018-08-22 14:13:31,401 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 618, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 442, in run_parallel
+    nets.networks[list(item.keys())[0]] = item[list(item.keys())[0]]
+IndexError: list index out of range
+2018-08-22 14:13:31,401 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 618, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 442, in run_parallel
+    nets.networks[list(item.keys())[0]] = item[list(item.keys())[0]]
+IndexError: list index out of range
+2018-08-22 14:16:05,372 root         ERROR    Unable to finish CoNet on test_otu
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\netwrap.py", line 281, in run_conet
+    with open(graphname, 'r') as fin:
+FileNotFoundError: [Errno 2] No such file or directory: 'C:/Users/u0118219/Documents/test_otu_conet.tsv'
+2018-08-22 14:16:05,372 root         ERROR    Unable to finish CoNet on test_otu
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\netwrap.py", line 281, in run_conet
+    with open(graphname, 'r') as fin:
+FileNotFoundError: [Errno 2] No such file or directory: 'C:/Users/u0118219/Documents/test_otu_conet.tsv'
+2018-08-22 14:16:05,373 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 618, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 442, in run_parallel
+    nets.networks[list(item.keys())[0]] = item[list(item.keys())[0]]
+IndexError: list index out of range
+2018-08-22 14:16:05,373 root         ERROR    Failed to run worker
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\network.py", line 618, in massoc_worker
+    nets = run_parallel(nets)
+  File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 442, in run_parallel
+    nets.networks[list(item.keys())[0]] = item[list(item.keys())[0]]
+IndexError: list index out of range

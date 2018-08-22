@@ -68,10 +68,10 @@ class NetworkPanel(wx.Panel):
 
         # select tools
         self.tool_txt = wx.StaticText(self, label='Select network inference tools to run')
-        self.tool_box = wx.CheckListBox(self, choices=['SparCC', 'CoNet', 'SPIEC-EASI'],
+        self.tool_box = wx.ListBox(self, choices=['SparCC', 'CoNet', 'SPIEC-EASI'],
                                         size=(boxsize[0], 110), style=wx.LB_MULTIPLE)
         self.tool_box.Bind(wx.EVT_MOTION, self.update_help)
-        self.tool_box.Bind(wx.EVT_CHECKLISTBOX, self.list_tools)
+        self.tool_box.Bind(wx.EVT_LISTBOX, self.list_tools)
 
         # select CoNet.jar
         self.conet_button = wx.Button(self, label="Select CoNet3 folder", size=btnsize)
@@ -237,7 +237,10 @@ class NetworkPanel(wx.Panel):
         dlg.Destroy()
 
     def list_tools(self, event):
-        text = list(self.tool_box.GetCheckedStrings())
+        ids = self.tool_box.GetSelections()
+        text = list()
+        for i in ids:
+            text.append(self.tool_box.GetString(i))
         self.tools = [x.lower() for x in text]
         self.send_settings()
 
@@ -337,10 +340,11 @@ class NetworkPanel(wx.Panel):
         try:
             eg = Thread(target=massoc_worker, args=(self.settings,))
             eg.start()
+            eg.join()  # necessary for ubuntu thread to quit crashing
         except Exception:
             logger.error("Failed to start worker thread", exc_info=True)
-        dlg = LoadingBar(self.settings)
-        dlg.ShowModal()
+        # dlg = LoadingBar(self.settings)
+        # dlg.ShowModal()
         self.send_settings()
 
 
@@ -409,8 +413,8 @@ class NetworkPanel(wx.Panel):
         if msg == 'CLEAR':
             self.jobs_choice.SetValue("")
             self.review.SetValue("")
-            for cb in self.tool_box.Checked:
-                self.tool_box.Check(cb, False)
+            for cb in self.tool_box.GetSelections():
+                self.tool_box.Deselect(cb, False)
             for cb in np.nditer(self.settings_choice.GetSelections):
                 self.settings_choice.Deselect(cb)
             self.spar_boot.SetValue("100")
@@ -436,7 +440,7 @@ class NetworkPanel(wx.Panel):
             self.tools = msg['tools']
             tooldict = {'sparcc': 0, 'conet': 1, 'spiec-easi': 2}
             for tool in msg['tools']:
-                self.tool_box.Check(tooldict[tool], True)
+                self.tool_box.SetSelection(tooldict[tool], True)
         if msg['spar_boot'] is not None:
             self.sparbox.ShowItems(show=True)
             self.Layout()

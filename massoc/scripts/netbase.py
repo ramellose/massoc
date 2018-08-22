@@ -92,15 +92,17 @@ class ImportDriver(object):
             logger.error("Could not write BIOM file to database. ", exc_info=True)
 
     def export_network(self, path, pairlist=None, mode='basic'):
+        # mode = sample removed
         try:
             g = nx.Graph()
             with self._driver.session() as session:
                 taxon_list = session.read_transaction(self._query,
                                                       "MATCH (n) WHERE n:Taxon OR n:Agglom_Taxon RETURN n")
+            taxon_list = list(_get_unique(taxon_list, key='n'))
             taxon_dict = dict()
             for i in range(len(taxon_list)):
-                taxon_dict[taxon_list[i]['n'].get('name')] = str(i)
-                g.add_node(str(i), name=taxon_list[i]['n'].get('name'))
+                taxon_dict[taxon_list[i]] = str(i)
+                g.add_node(str(i), name=taxon_list[i])
             edge_list = pairlist
             if not pairlist:
                 with self._driver.session() as session:
@@ -114,25 +116,6 @@ class ImportDriver(object):
                     index_1 = taxon_dict[edge_list[i][0]]
                     index_2 = taxon_dict[edge_list[i][1]]
                     g.add_edge(index_1, index_2, source=edge_list[i][2])
-            if mode == 'sample':
-                with self._driver.session() as session:
-                    sample_list = session.read_transaction(self._query,
-                                                           "MATCH (n:Sample) RETURN n")
-                sample_dict = dict()
-                for i in range(len(sample_list)):
-                    sample_dict[sample_list[i]['n'].get('name')] = 's' + str(i)
-                    g.add_node(('s' + str(i)), name=sample_list[i]['n'].get('name'))
-                with self._driver.session() as session:
-                    assoc_list = session.read_transaction(self._sample_list)
-                for i in range(len(assoc_list)):
-                    taxon = taxon_dict[assoc_list[i][0]]
-                    sample_dict[assoc_list[i][1]] = 's' + str(i)
-                    g.add_edge(taxon, sample_dict[assoc_list[i][1]],
-                               type=assoc_list[i][2], test=assoc_list[i][3], correlation=assoc_list[i][4])
-                with self._driver.session() as session:
-                    agglom_list = session.read_transaction(self._agglom_list)
-                for edge in agglom_list:
-                    g.add_edge(taxon_dict[edge[0]], taxon_dict[edge[1]])
             with self._driver.session() as session:
                 tax_dict = session.read_transaction(self._tax_dict)
             # necessary for networkx indexing
@@ -186,8 +169,10 @@ class ImportDriver(object):
                     for type in attributes:
                         attribute_dict[type][taxon] = attributes[type]
                 for item in attribute_dict:
-                    nx.set_node_attributes(g, attribute_dict[item], item)
-                nx.set_node_attributes(g, sample_properties[item], 'name')
+                    if item is None:
+                        nx.set_node_attributes(g, str(attribute_dict[item]), 'Sample_variables')
+                    else:
+                        nx.set_node_attributes(g, attribute_dict[item], item)
             g = g.to_undirected()
             nx.write_graphml(g, path)
         except Exception:
@@ -245,65 +230,74 @@ class ImportDriver(object):
         """Creates a node that represents a taxon.
         Also generates taxonomy nodes + connects them, and
         includes metadata. """
-        tx.run("CREATE (a:Taxon) SET a.name = $id", id=taxon)
-        tax_index = biomfile.index(axis='observation', id=taxon)
-        tax_dict = biomfile.metadata(axis='observation')[tax_index]['taxonomy']
-        tax_levels = ['Kingdom', 'Phylum', 'Class',
-                      'Order', 'Family', 'Genus', 'Species']
-        rel_list = ['IS_KINGDOM', 'IS_PHYLUM', 'IS_CLASS',
-                    'IS_ORDER', 'IS_FAMILY', 'IS_GENUS', 'IS_SPECIES']
-        tree_list = ['PART_OF_KINGDOM', 'PART_OF_PHYLUM', 'PART_OF_CLASS',
-                    'PART_OF_ORDER', 'PART_OF_FAMILY', 'PART_OF_GENUS']
-        if str(taxon) is not 'Bin':
-            meta = biomfile.metadata(axis='observation')[tax_index]
-            for key in meta:
-                if key != 'taxonomy' and type(meta[key]) == str:
-                    hit = tx.run(("MATCH (a:TaxonProperty) WHERE a.name = '" +
-                                  meta[key] + "' AND a.type = '" +
-                                  key + "' RETURN a")).data()
-                    if len(hit) == 0:
+        # first check if OTU already exists
+        hit = tx.run(("MATCH (a:Taxon {name: '" + taxon +
+                      "'}) RETURN a")).data()
+        if len(hit)==0:
+            tx.run("CREATE (a:Taxon) SET a.name = $id", id=taxon)
+            tax_index = biomfile.index(axis='observation', id=taxon)
+            tax_dict = biomfile.metadata(axis='observation')[tax_index]['taxonomy']
+            tax_levels = ['Kingdom', 'Phylum', 'Class',
+                          'Order', 'Family', 'Genus', 'Species']
+            rel_list = ['IS_KINGDOM', 'IS_PHYLUM', 'IS_CLASS',
+                        'IS_ORDER', 'IS_FAMILY', 'IS_GENUS', 'IS_SPECIES']
+            tree_list = ['PART_OF_KINGDOM', 'PART_OF_PHYLUM', 'PART_OF_CLASS',
+                        'PART_OF_ORDER', 'PART_OF_FAMILY', 'PART_OF_GENUS']
+            if str(taxon) is not 'Bin':
+                meta = biomfile.metadata(axis='observation')[tax_index]
+                for key in meta:
+                    if key != 'taxonomy' and type(meta[key]) == str:
+                        hit = tx.run(("MATCH (a:TaxonProperty) WHERE a.name = '" +
+                                      meta[key] + "' AND a.type = '" +
+                                      key + "' RETURN a")).data()
+                        if len(hit) == 0:
+                            if key and meta[key]:
+                                tx.run("CREATE (a:TaxonProperty) "
+                                       "SET a.name = $value AND a.type = $type "
+                                       "RETURN a", value=meta[key], type=key).data()
                         if key and meta[key]:
-                            tx.run("CREATE (a:TaxonProperty) "
-                                   "SET a.name = $value AND a.type = $type "
-                                   "RETURN a", value=meta[key], type=key).data()
-                    if key and meta[key]:
-                        tx.run(("MATCH (a:Taxon), (b:TaxonProperty) "
-                                "WHERE a.name = '" + taxon +
-                                "' AND b.name = '" + meta[key] +
-                                "' CREATE (a)-[r:HAS_PROPERTY]->(b) "
-                                "RETURN type(r)"))
-            # define range for which taxonomy needs to be added
-            j = 0
-            if tax_dict:
-                for i in range(0, 7):
-                    level = tax_dict[i]
-                    if sum(c.isalpha() for c in level) > 1:
-                        # only consider adding as node if there is more
-                        # than 1 character in the taxonomy
-                        # first request ID to see if the taxonomy node already exists
-                        j += 1
-                for i in range(0, j):
-                    hit = tx.run(("MATCH (a:" + tax_levels[i] +
-                                  " {name: '" + tax_dict[i] +
-                                  "'}) RETURN a")).data()
-                    if len(hit) == 0:
-                        tx.run(("CREATE (a:" + tax_levels[i] +
-                                " {name: '" + tax_dict[i] +
-                                "'}) RETURN a")).data()
-                        if i > 0:
-                            tx.run(("MATCH (a:" + tax_levels[i] +
-                                    "), (b:" + tax_levels[i-1] +
-                                    ") WHERE a.name = '" + tax_dict[i] +
-                                    "' AND b.name = '" + tax_dict[i-1] +
-                                    "' CREATE (a)-[r:" + tree_list[i-1] +
+                            tx.run(("MATCH (a:Taxon), (b:TaxonProperty) "
+                                    "WHERE a.name = '" + taxon +
+                                    "' AND b.name = '" + meta[key] +
+                                    "' CREATE (a)-[r:HAS_PROPERTY]->(b) "
+                                    "RETURN type(r)"))
+                # define range for which taxonomy needs to be added
+                j = 0
+                if tax_dict:
+                    for i in range(len(tax_dict)):
+                        level = tax_dict[i]
+                        if sum(c.isalpha() for c in level) > 1:
+                            # only consider adding as node if there is more
+                            # than 1 character in the taxonomy
+                            # first request ID to see if the taxonomy node already exists
+                            j += 1
+                    for i in range(0, j):
+                        hit = tx.run(("MATCH (a:" + tax_levels[i] +
+                                      " {name: '" + tax_dict[i] +
+                                      "'}) RETURN a")).data()
+                        if len(hit) == 0:
+                            tx.run(("CREATE (a:" + tax_levels[i] +
+                                    " {name: '" + tax_dict[i] +
+                                    "'}) RETURN a")).data()
+                            if i > 0:
+                                tx.run(("MATCH (a:" + tax_levels[i] +
+                                        "), (b:" + tax_levels[i-1] +
+                                        ") WHERE a.name = '" + tax_dict[i] +
+                                        "' AND b.name = '" + tax_dict[i-1] +
+                                        "' CREATE (a)-[r:" + tree_list[i-1] +
+                                        "]->(b) RETURN type(r)"))
+                        hit = tx.run(("MATCH (a:Taxon)-[r]-(b:" + tax_levels[i] +
+                                ") WHERE a.name = '" + taxon +
+                                "' AND b.name = '" + tax_dict[i] +
+                                "' RETURN type(r)")).data()
+                        if len(hit) == 0:
+                            tx.run(("MATCH (a:Taxon), (b:" + tax_levels[i] +
+                                    ") WHERE a.name = '" + taxon +
+                                    "' AND b.name = '" + tax_dict[i] +
+                                    "' CREATE (a)-[r:" + rel_list[i] +
                                     "]->(b) RETURN type(r)"))
-                    tx.run(("MATCH (a:Taxon), (b:" + tax_levels[i] +
-                            ") WHERE a.name = '" + taxon +
-                            "' AND b.name = '" + tax_dict[i] +
-                            "' CREATE (a)-[r:" + rel_list[i] +
-                            "]->(b) RETURN type(r)"))
-        else:
-            tx.run("CREATE (a:Taxon) SET a.name = $id", id='Bin')
+            else:
+                tx.run("CREATE (a:Taxon) SET a.name = $id", id='Bin')
 
     @staticmethod
     def _create_sample(tx, sample, exp_id, biomfile):
@@ -399,6 +393,12 @@ class ImportDriver(object):
             taxon1 = edge[0]
             taxon2 = edge[1]
             attr = network.get_edge_data(taxon1, taxon2)
+            # networkx files imported from graphml will have an index
+            # the 'name' property changes the name to the index
+            # should probably standardize graphml imports or something
+            if 'name' in network.nodes[taxon1]:
+                taxon1 = network.nodes[taxon1]['name']
+                taxon2 = network.nodes[taxon2]['name']
             if mode == 'weight':
                 network_weight = str(attr['weight'])
             hit = tx.run(("MATCH p=(:Taxon {name: '" +
@@ -411,7 +411,7 @@ class ImportDriver(object):
                         matched_hit = node
                     else:
                         hit = []
-                hit[0] = matched_hit
+                hit.append(matched_hit)
             # first check if association is already present)
             if len(hit) > 0:
                 for association in hit:

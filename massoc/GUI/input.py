@@ -67,7 +67,7 @@ class InputPanel(wx.Panel):
         self.biom_txt = wx.TextCtrl(self, size=(300, 80), style=wx.TE_MULTILINE)
 
         # Opening network files
-        self.net_choice = wx.ListBox(self, choices=['Construct network', 'Open network file'], size=(300, 40))
+        self.net_choice = wx.ListBox(self, choices=['Construct network', 'Open network file'], size=(300, 50))
         self.net_choice.Bind(wx.EVT_LISTBOX, self.toggle_networks)
         self.net_choice.Bind(wx.EVT_MOTION, self.update_help)
         self.net_btn = wx.Button(self, label="Open network file", size=btnsize)
@@ -349,7 +349,7 @@ class InputPanel(wx.Panel):
         Shows buttons with filenames
         for tab-delimited files.
         """
-        if self.tax_file.IsShown():
+        if self.count_btn.IsShown():
             self.bottomleftsizer.ShowItems(show=False)
         else:
             self.bottomleftsizer.ShowItems(show=True)
