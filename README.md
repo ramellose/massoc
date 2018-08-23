@@ -12,14 +12,16 @@ Currently, the following features are available:
 More features are currently under construction.
 
 Welcome to <i>massoc</i>! Contact the author at lisa.rottjers (at) kuleuven.be. Your feedback is much appreciated!
-Currently, you are using massoc 0.1. This version is still in early alpha. Encountering bugs is highly likely!
+This is version 0.2.1, and therefore still in early alpha. Encountering bugs is highly likely!
 
 
 ## Getting Started
 
-To run <i>massoc</i>, you only need to run the appropriate executable for your platform.
-These executables are stand-alone and do not need the other files in this repository.
+To run <i>massoc</i> on Windows or Ubuntu, you only need to run the appropriate executable for your platform.
+These executables are stand-alone and do not need the other files in the repository. However, some of the features
+require you to have installed specific software, for example Neo4j Server.
 <a href="https://github.com/ramellose/massoc/releases">Find the latest releases here</a>.
+
 
 ## Development version and command line
 
@@ -68,10 +70,16 @@ Find your Python 2 installation, rename the python.exe file to python2.exe and a
 
 The graph database utilities are built on Neo4j.
 Download the Neo4j Server community edition from [here](https://neo4j.com/download-center/#releases).
-Extract the files from the distribution and run <b>bin\neo4j.bat console</b> to initialize the server.
+
+Extract the files from the distribution.
+On Windows,  run <b>bin\neo4j.bat console</b>to initialize the server.
+
 On Linux, set your default Java version to 1.8.0:
-sudo apt install openjdk-8-jk
+```
+sudo apt install openjdk-8-jk</b>
 sudo update-java-alternatives --set java-1.8.0-openjdk-amd64
+```
+After downloading and extracting the Neo4j Server folder, initialize the server with <b>bin\neo4j console</b>.
 
 ### Tutorials
 
