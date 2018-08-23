@@ -405,13 +405,17 @@ class ImportDriver(object):
                           taxon1 + "'})<--(:Association)-->(:Taxon {name: '" +
                           taxon2 + "'}) RETURN p")).data()
             if mode == 'weight' and len(hit)>0:
+                # need to find the association that not only matches taxon, but also weight
                 for node in hit:
+                    matched_hit = None
                     database_weight = node['p'].nodes[1].get('weight')
                     if database_weight == network_weight:
                         matched_hit = node
                     else:
-                        hit = []
-                hit.append(matched_hit)
+                        pass
+                if matched_hit:
+                    hit = list()
+                    hit.append(matched_hit)
             # first check if association is already present)
             if len(hit) > 0:
                 for association in hit:

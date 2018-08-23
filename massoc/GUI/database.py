@@ -24,6 +24,7 @@ from psutil import Process
 from time import sleep
 from platform import system
 import logging
+import sys
 import logging.handlers as handlers
 logger = logging.getLogger()
 hdlr = logging.FileHandler(resource_path("massoc.log"))
@@ -103,11 +104,11 @@ class DataPanel(wx.Panel):
 
         # select taxonomic levels
         self.tax_txt = wx.StaticText(self, label='Agglomerate edges to: ')
-        self.tax_choice = wx.CheckListBox(self, choices=['Species', 'Genus',
+        self.tax_choice = wx.ListBox(self, choices=['Species', 'Genus',
                                                          'Family', 'Order', 'Class', 'Phylum'],
                                           size=(boxsize[0], 110), style=wx.LB_MULTIPLE)
         self.tax_choice.Bind(wx.EVT_MOTION, self.update_help)
-        self.tax_choice.Bind(wx.EVT_CHECKLISTBOX, self.get_levels)
+        self.tax_choice.Bind(wx.EVT_LISTBOX, self.get_levels)
         self.tax_choice.Enable(False)
         self.tax_txt.Enable(False)
 
@@ -122,9 +123,9 @@ class DataPanel(wx.Panel):
 
         # button for sample association
         self.assoc_txt = wx.StaticText(self, label='Associate taxa to: ' )
-        self.assoc_box = wx.CheckListBox(self, choices=['Select a BIOM or metadata file first'], size=(300, 90))
+        self.assoc_box = wx.ListBox(self, choices=['Select a BIOM or metadata file first'], size=(300, 90))
         self.assoc_box.Bind(wx.EVT_MOTION, self.update_help)
-        self.assoc_box.Bind(wx.EVT_CHECKLISTBOX, self.run_association)
+        self.assoc_box.Bind(wx.EVT_LISTBOX, self.run_association)
         self.assoc_txt.Enable(False)
         self.assoc_box.Enable(False)
 
@@ -141,6 +142,13 @@ class DataPanel(wx.Panel):
         # review settings
         self.rev_text = wx.StaticText(self, label='Current operations')
         self.review = wx.TextCtrl(self, value='', size=(boxsize[0], 300), style=wx.TE_READONLY | wx.TE_MULTILINE)
+
+        # export to cytoscape
+        self.export_txt = wx.StaticText(self, label='Export to Cytoscape-compatible GraphML format.')
+        self.export_name = wx.TextCtrl(self, value='filename', size=btnsize)
+        self.export_name.Bind(wx.EVT_TEXT, self.update_gml_name)
+        self.export_txt.Enable(False)
+        self.export_name.Enable(False)
 
         # Run button
         self.go = wx.Button(self, label='Run database operations', size=(btnsize[0], 40))
@@ -177,6 +185,9 @@ class DataPanel(wx.Panel):
         self.rightsizer.AddSpacer(20)
         self.rightsizer.Add(self.logic_txt)
         self.rightsizer.Add(self.logic_choice)
+        self.rightsizer.AddSpacer(20)
+        self.rightsizer.Add(self.export_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        self.rightsizer.Add(self.export_name, flag=wx.ALIGN_LEFT)
         self.rightsizer.AddSpacer(20)
         self.rightsizer.Add(self.go, flag=wx.ALIGN_CENTER)
         self.rightsizer.AddSpacer(20)
@@ -265,7 +276,6 @@ class DataPanel(wx.Panel):
         try:
             eg = Thread(target=data_starter, args=(self.settings,))
             eg.start()
-            eg.join()
         except Exception:
             logger.error("Failed to initiate database", exc_info=True)
         # removed dlg.LoadingBar() dlg.ShowModal()
@@ -278,6 +288,10 @@ class DataPanel(wx.Panel):
         self.logic_txt.Enable(True)
         self.logic_choice.Enable(True)
         self.weight_txt.Enable(True)
+        self.export_name.Enable(True)
+        self.export_txt.Enable(True)
+
+
 
     def close_database(self, event):
         try:
@@ -307,7 +321,10 @@ class DataPanel(wx.Panel):
         self.tax_choice.Enable(True)
 
     def get_levels(self, event):
-        text = self.tax_choice.GetCheckedStrings()
+        text = list()
+        ids = self.tax_choice.GetSelections()
+        for i in ids:
+            text.append(self.tax_choice.GetString(i))
         self.agglom = list(text)
         self.send_settings()
 
@@ -332,6 +349,13 @@ class DataPanel(wx.Panel):
         name = self.logic_choice.GetSelection()
         text = self.logic_choice.GetString(name)
         self.logic.append(text)
+        self.send_settings()
+
+
+    def update_gml_name(self, event):
+        text = self.export_name.GetValue()
+        self.gml_name = list()
+        self.gml_name.append(text)
         self.send_settings()
 
     def receive_meta(self, msg):
@@ -451,8 +475,10 @@ def data_worker(inputs):
     """
     Carries out operations on database as specified by user.
     """
+    checks = str()
     try:
-        pub.sendMessage('update', msg='Starting database drivers.')
+        # pub.sendMessage('update', msg='Starting database drivers.')
+        sys.stdout.write('Starting database drivers.')
         importdriver = ImportDriver(user=inputs['username'][0],
                                     password=inputs['password'][0],
                                     uri=inputs['address'][0])
@@ -471,11 +497,15 @@ def data_worker(inputs):
             else:
                 mode = 'Ignore weight'
             for level in range(0, level_id+1):
-                pub.sendMessage('update', msg="Agglomerating edges...")
+                # pub.sendMessage('update', msg="Agglomerating edges...")
+                sys.stdout.write("Agglomerating edges...")
                 statdriver.agglomerate_network(level=tax_list[level], mode=mode)
+            checks += 'Successfully agglomerated edges. \n'
         if inputs['assoc']:
-            pub.sendMessage('update', msg="Associating samples...")
+            # pub.sendMessage('update', msg="Associating samples...")
+            sys.stdout.write("Associating samples...")
             statdriver.associate_samples(properties=inputs['assoc'])
+            checks += 'Completed associations. \n'
         pairlist = None
         if inputs['logic']:
             if inputs['logic'][0] == 'Union':
@@ -484,12 +514,18 @@ def data_worker(inputs):
                 pairlist = statdriver.graph_intersection()
             if inputs['logic'][0] == 'Difference':
                 pairlist = statdriver.graph_difference()
+            checks += 'Logic operations completed. \n'
         filename = inputs['fp'][0] + '/' + inputs['gml_name'][0] + '.graphml'
-        pub.sendMessage('update', msg="Exporting network...")
+        # pub.sendMessage('update', msg="Exporting network...")
+        sys.stdout.write("Exporting network to: " + filename + "\n")
+        checks += "Exporting network to: " + filename + "\n"
         importdriver.export_network(path=filename, pairlist=pairlist, mode='basic')
-        pub.sendMessage('update', msg="Completed database operations!")
+        # pub.sendMessage('update', msg="Completed database operations!")
+        sys.stdout.write("Completed database operations!")
+        checks += 'Completed database operations! \n'
     except Exception:
         logger.error("Failed to run database worker", exc_info=True)
+        checks += 'Failed to run database worker. \n'
     try:
         logfile = open(resource_path("massoc.log"), 'r')
         logtext = logfile.read()
@@ -499,6 +535,7 @@ def data_worker(inputs):
         dump.close()
     except Exception:
         pass
+    pub.sendMessage('database_log', msg=checks)
 
 
 def data_starter(inputs):
@@ -529,20 +566,23 @@ def data_starter(inputs):
         i += 1
     if i == 10:
         logger.error("Unable to access Neo4j database.", exc_info=True)
-        pub.sendMessage('update', msg='Could not access Neo4j database!')
+        # pub.sendMessage('update', msg='Could not access Neo4j database!')
+        sys.stdout.write('Could not access Neo4j database!')
     importdriver.clear_database()
     try:
-        pub.sendMessage('update', msg='Uploading BIOM files...')
+        # pub.sendMessage('update', msg='Uploading BIOM files...')
+        sys.stdout.write('Uploading BIOM files...')
         itemlist = list()
         for item in inputs['procbioms']:
             biomfile = load_table(item)
             importdriver.convert_biom(biomfile=biomfile, exp_id=item)
             itemlist.append(item)
     except Exception:
-        checks += 'Unable to upload BIOM files to Neo4j database.'
+        checks += 'Unable to upload BIOM files to Neo4j database. \n'
         logger.error("Unable to upload BIOM files to Neo4j database.", exc_info=True)
     try:
-        pub.sendMessage('update', msg='Uploading network files...')
+        # pub.sendMessage('update', msg='Uploading network files...')
+        sys.stdout.write('Uploading network files...')
         for item in inputs['network']:
             network = nx.read_weighted_edgelist(item)
             importdriver.convert_networkx(network=network, network_id=item, mode='weight')
@@ -552,9 +592,10 @@ def data_starter(inputs):
             checks += (item + '\n')
         checks += '\n'
     except Exception:
-        checks += 'Unable to upload network files to Neo4j database.'
+        checks += 'Unable to upload network files to Neo4j database.\n'
         logger.error("Unable to upload network files to Neo4j database.", exc_info=True)
-    pub.sendMessage('update', msg='Completed database operations!')
+    # pub.sendMessage('update', msg='Completed database operations!')
+    sys.stdout.write('Completed database operations!')
     pub.sendMessage('database_log', msg=checks)
 
 
