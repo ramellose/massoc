@@ -549,9 +549,12 @@ def data_starter(inputs):
         else:
             filepath = inputs['neo4j'][0] + '/bin/neo4j console'
         filepath = filepath.replace("\\", "/")
-        if system() == 'Windows':
+        if system() == 'Windows' or system() == 'Darwin':
             p = Popen(filepath, shell=True)
         else:
+            # note: old version used gnome-terminal, worked with Ubuntu
+            # new version uses xterm to work with macOS
+            # check if this conflicts!
             p = Popen(["gnome-terminal", "-e", filepath])  # x-term compatible alternative terminal
         pub.sendMessage('pid', msg=p.pid)
     except Exception:

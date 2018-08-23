@@ -14,21 +14,35 @@ More features are currently under construction.
 Welcome to <i>massoc</i>! Contact the author at lisa.rottjers (at) kuleuven.be. Your feedback is much appreciated!
 This is version 0.2.1, and therefore still in early alpha. Encountering bugs is highly likely!
 
-
 ## Getting Started
 
 To run <i>massoc</i> on Windows or Ubuntu, you only need to run the appropriate executable for your platform.
 These executables are stand-alone and do not need the other files in the repository. However, some of the features
-require you to have installed specific software, for example Neo4j Server.
+require you to have installed specific software, for example Neo4j Server. Read the sections below to figure out which
+dependencies you need to install and how to do so.
 <a href="https://github.com/ramellose/massoc/releases">Find the latest releases here</a>.
 
+There is no executable available for macOS systems, but you can set up your macOS system to run massoc as follows.
+First install macports, then run:
+```
+sudo port install python35
+sudo port select --set python python35
+sudo port install py35-pip
+sudo port select --set pip pip35
+pip install numpy==1.13.1 scipy h5py nose Cython psutil neo4j matplotlib networkx multiprocess sklearn scikit-bio biom-format --user
+pip install -U wxPython --user
+```
 
-## Development version and command line
+Download the massoc repository, navigate to the massoc directory and run:
+```
+python run_massoc.py
+```
 
-For development purposes, the GUI can be executed from run_massoc.py.
-The command line interface is accessible through main.py, but I am working on a stand-alone version that does not require you to manage dependencies.
-
-massoc runs on Python >= 3.5. All its dependencies are listed in the requirements.txt file.
+To reset to the default Python version, run:
+```
+sudo port select --set python python37
+sudo port select --set pip pip37
+```
 
 ## Network inference in <i>massoc</i>
 
@@ -74,16 +88,28 @@ Download the Neo4j Server community edition from [here](https://neo4j.com/downlo
 Extract the files from the distribution.
 On Windows,  run <b>bin\neo4j.bat console</b>to initialize the server.
 
-On Linux, set your default Java version to 1.8.0:
+On Linux, first set your default Java version to 1.8.0:
 ```
-sudo apt install openjdk-8-jk</b>
+sudo apt install openjdk-8-jk
 sudo update-java-alternatives --set java-1.8.0-openjdk-amd64
 ```
+For macOS, first install the appropriate Java version:
+```
+brew cask install java8
+```
 After downloading and extracting the Neo4j Server folder, initialize the server with <b>bin\neo4j console</b>.
+
 
 ### Tutorials
 
 Check out the demo at https://github.com/ramellose/massoc/raw/master/massoc/docs/massoc_demo.pdf
+
+## Development version and command line
+
+For development purposes, the GUI can be executed from run_massoc.py.
+The command line interface is currently under development.
+
+massoc runs on Python 3.5. All its dependencies are listed in the requirements.txt file.
 
 ### Contributions
 
