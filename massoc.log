@@ -4643,3 +4643,203 @@ Traceback (most recent call last):
   File "C:\Users\u0118219\Documents\massoc\massoc\scripts\main.py", line 442, in run_parallel
     nets.networks[list(item.keys())[0]] = item[list(item.keys())[0]]
 IndexError: list index out of range
+2018-08-22 15:42:13,795 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 536, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 15:42:13,795 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 536, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 15:42:13,796 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 545, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 15:42:13,796 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 545, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:25,648 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:25,648 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:25,649 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:25,649 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:35,336 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:35,336 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:35,336 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:35,336 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:35,680 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:35,680 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:35,680 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:35,680 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:35,822 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:35,822 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:35,822 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:35,822 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:36,121 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:36,121 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:36,122 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:36,122 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:36,281 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:36,281 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:36,282 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:06:36,282 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:13:42,307 root         ERROR    Failed to initiate database
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 524, in data_starter
+    pub.sendMessage('pid', msg=p.pid)
+AttributeError: 'int' object has no attribute 'pid'
+2018-08-22 16:13:42,307 root         ERROR    Failed to initiate database
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 524, in data_starter
+    pub.sendMessage('pid', msg=p.pid)
+AttributeError: 'int' object has no attribute 'pid'
+2018-08-22 16:13:56,638 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:13:56,638 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:13:56,638 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-22 16:13:56,638 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-23 08:03:55,746 root         ERROR    Failed to initiate database
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 524, in data_starter
+    pub.sendMessage('pid', msg=p.pid)
+AttributeError: 'int' object has no attribute 'pid'
+2018-08-23 08:03:55,746 root         ERROR    Failed to initiate database
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 524, in data_starter
+    pub.sendMessage('pid', msg=p.pid)
+AttributeError: 'int' object has no attribute 'pid'
+2018-08-23 08:09:46,944 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-23 08:09:46,944 root         ERROR    Unable to upload BIOM files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 544, in data_starter
+    for item in inputs['procbioms']:
+TypeError: 'NoneType' object is not iterable
+2018-08-23 08:09:46,951 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
+2018-08-23 08:09:46,951 root         ERROR    Unable to upload network files to Neo4j database.
+Traceback (most recent call last):
+  File "C:\Users\u0118219\Documents\massoc\massoc\GUI\database.py", line 554, in data_starter
+    for item in inputs['network']:
+TypeError: 'NoneType' object is not iterable
