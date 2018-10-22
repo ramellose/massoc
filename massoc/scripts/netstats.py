@@ -2,9 +2,6 @@
 These functions perform operations on inferred networks to
 provide users with more informative networks.
 For example, find_netsets calculates sets such as union, intersection and difference.
-build_assoctree builds a tree of taxa based on their predicted associations.
-confident_centrality calculates centrality measures for a network and assigns confidence
-intervals to the values through permutation.
 """
 
 __author__ = 'Lisa Rottjers'
@@ -75,7 +72,10 @@ class Driver(object):
         at the specified taxonomic level. If the mode is set to 'weight',
         associations are only agglomerated if their weight matches.
         The stop condition is the length of the pair list;
-        as soon as no pair meets the qualification, agglomeration is terminated."""
+        as soon as no pair meets the qualification, agglomeration is terminated.
+
+        By default, agglomeration is done separately
+        per network in the database."""
         try:
             stop_condition = False
             while not stop_condition:
@@ -85,7 +85,32 @@ class Driver(object):
                     pair = pairs[0]
                     self.agglomerate_pair(pair, level=level, mode=mode)
                 else:
-                    stop_condition = True
+                    # if no pairs are found, they may be with unassigned taxa
+                    # the unassigned_pairlist function looks for those
+                    pairs = self.get_unassigned_pairlist(level=level, mode=mode)
+                    if len(pairs) > 0:
+                        pair = pairs[0]
+                        self.agglomerate_pair(pair, level=level, mode=mode)
+                    else:
+                        stop_condition = True
+            stop_condition = False
+            while not stop_condition:
+                # after agglomerating associations
+                # taxa with same taxonomic assignments should be merged
+                # this rewires the network
+                pairs = self.get_taxlist(level=level)
+                if len(pairs) > 0:
+                    pair = pairs[0]
+                    self.agglomerate_taxa(pair, level=level)
+                else:
+                    # if no pairs are found, they may be with unassigned taxa
+                    # the unassigned_pairlist function looks for those
+                    pairs = self.get_unassigned_taxlist(level=level)
+                    if len(pairs) > 0:
+                        pair = pairs[0]
+                        self.agglomerate_taxa(pair, level=level)
+                    else:
+                        stop_condition = True
         except Exception:
             logger.error("Could not agglomerate associations to higher taxonomic levels. ", exc_info=True)
 
@@ -98,23 +123,41 @@ class Driver(object):
         except Exception:
             logger.error("Could not obtain list of matching associations. ", exc_info=True)
 
+    def get_unassigned_pairlist(self, level, mode):
+        """Starts a new transaction for every pair list request."""
+        try:
+            with self._driver.session() as session:
+                pairs = session.read_transaction(self._unassigned_pairlist, level, mode)
+                return pairs
+        except Exception:
+            logger.error("Could not obtain list of matching associations. ", exc_info=True)
+
     def agglomerate_pair(self, pair, level, mode):
         """For one pair, as returned by get_pairlist,
         this function creates new agglomerated nodes,
         deletes old agglomerated nodes, and chains taxonomic nodes
         to the new agglomerated nodes. Morever, the two old associations
-        are deleted and replaced by a new association."""
+        are deleted and replaced by a new association.
+
+        Note: this function needs to be fixed to deal with
+        unasiggned taxonomy. For example, if 20 Rhodobacter species
+        interact with an unassigned bacterial OTU, all 20 will
+        be retained in the final network.
+        Moreover, after agglomerating associations,
+        agglomerated taxa should be agglomerated with taxa
+        that share their taxonomic level so a large component is recreated. """
         try:
             with self._driver.session() as session:
                 agglom_1 = session.write_transaction(self._create_agglom)
                 agglom_2 = session.write_transaction(self._create_agglom)
                 session.write_transaction(self._chainlinks, agglom_1, pair['p'].nodes[1], pair['r'].nodes[1])
                 session.write_transaction(self._chainlinks, agglom_2, pair['p'].nodes[3], pair['r'].nodes[3])
-                session.write_transaction(self._taxonomy, agglom_1, pair['p'].nodes[0], level)
-                session.write_transaction(self._taxonomy, agglom_2, pair['r'].nodes[4], level)
+                session.write_transaction(self._taxonomy, agglom_1, pair['p'].nodes[0], pair['p'].nodes[1], level)
+                session.write_transaction(self._taxonomy, agglom_2, pair['r'].nodes[4], pair['r'].nodes[3], level)
                 networks = session.read_transaction(self._get_network, [pair['p'].nodes[2], pair['r'].nodes[2]])
                 weight = session.read_transaction(self._get_weight, [pair['p'].nodes[2], pair['r'].nodes[2]])
                 session.write_transaction(self._create_association, agglom_1, agglom_2, networks, weight, mode)
+            with self._driver.session() as session:
                 session.write_transaction(self._delete_old_associations, [pair['p'].nodes[2], pair['r'].nodes[2]])
                 session.write_transaction(self._delete_old_agglomerations, (pair['p'].nodes + pair['r'].nodes))
         except Exception:
@@ -192,6 +235,41 @@ class Driver(object):
         except Exception:
             logger.error("Could not associate a specific taxon to sample variables. ", exc_info=True)
 
+    def get_taxlist(self, level):
+        """Starts a new transaction for every tax list request."""
+        try:
+            with self._driver.session() as session:
+                pairs = session.read_transaction(self._tax_list, level)
+                return pairs
+        except Exception:
+            logger.error("Could not obtain list of matching taxa. ", exc_info=True)
+
+    def get_unassigned_taxlist(self, level):
+        """Starts a new transaction for every tax list request."""
+        try:
+            with self._driver.session() as session:
+                pairs = session.read_transaction(self._unassigned_tax_list, level)
+                return pairs
+        except Exception:
+            logger.error("Could not obtain list of matching taxa. ", exc_info=True)
+
+    def agglomerate_taxa(self, pair, level):
+        """For one pair, as returned by get_taxlist,
+        this function merges nodes with similar taxonomy
+        but different associations together.
+        Old nodes are linked to the new agglomerated node,
+        except for Agglom_Taxon; in that case,
+        links to the ancestral nodes are generated.  """
+        try:
+            with self._driver.session() as session:
+                agglom_1 = session.write_transaction(self._create_agglom)
+                session.write_transaction(self._chainlinks, agglom_1, pair['p'].nodes[1], pair['r'].nodes[1])
+                session.write_transaction(self._taxonomy, agglom_1, pair['p'].nodes[0], pair['p'].nodes[1], level)
+                session.write_transaction(self._rewire_associations, agglom_1, pair['p'], pair['r'])
+                session.write_transaction(self._delete_old_agglomerations, ([pair['p'].nodes[1]] + [pair['r'].nodes[1]]))
+        except Exception:
+            logger.error("Could not agglomerate a pair of matching associations. ", exc_info=True)
+
     @staticmethod
     def _query(tx, query):
         """Processes custom queries."""
@@ -205,24 +283,128 @@ class Driver(object):
         taxonomic levels at both ends match, and the name of
         the associations are different. If 'weight' is specified as mode,
         only associations with identical weight are returned."""
-        if mode is 'weight':
+        if mode == 'weight':
             result = tx.run(("MATCH p=(e:" +
                              level + ")<--()<--(a:Association)-->()-->(g:" +
                              level + ") MATCH r=(h:" + level +
                              ")<--()<--(b:Association)-->()-->(f:" +
                              level +
-                             ") WHERE (a.name <> b.name) AND (a.weight = b.weight) AND "
-                             "(e.name = h.name) AND (g.name = f.name) RETURN p,r LIMIT 1"))
+                             ") MATCH (x)--(:Network)--(y)"
+                             " WHERE (a.name <> b.name) AND (a.weight = b.weight) AND "
+                             "(e.name = h.name) AND (g.name = f.name) "
+                             "AND (x.name = a.name) AND (y.name = b.name) "
+                             "RETURN p,r LIMIT 1"))
         else:
             result = tx.run(("MATCH p=(e:" + level +
                              ")<--()<--(a:Association)-->()-->(g:" + level +
                              ") MATCH r=(h:" + level +
                              ")<--()<--(b:Association)-->()-->(f:" + level +
-                             ") WHERE (a.name <> b.name) AND "
+                             ") MATCH (x)--(:Network)--(y)"
+                             " WHERE (a.name <> b.name) AND "
                              "(e.name = h.name) AND (g.name = f.name) "
+                             "AND (x.name = a.name) AND (y.name = b.name)"
                              "RETURN p,r LIMIT 1"))
         return result.data()
 
+    @staticmethod
+    def _tax_list(tx, level):
+        """Returns a list of taxon pairs, where the
+        taxonomic levels match. """
+        result = tx.run(("MATCH p=(e:" +
+                         level + ")--(m)--(:Association) MATCH r=(h:" + level +
+                         ")<--(n)--(:Association) WHERE (m.name <> n.name) "
+                         "AND (e.name = h.name) RETURN p,r LIMIT 1"))
+        return result.data()
+
+    @staticmethod
+    def _unassigned_tax_list(tx, level):
+        """Returns a list of taxon pairs, where the
+        taxonomic levels are lacking for both taxa. """
+        levels = ['Species', 'Genus', 'Family', 'Order', 'Class', 'Phylum', 'Kingdom']
+        current = levels.index(level)
+        out = list()
+        for j in range(current, 6):
+            result = tx.run(("MATCH p=(e:" + levels[j+1] + ")--(m)--(:Association)--()--(:Kingdom) "
+                             "MATCH r=(h:" + levels[j+1] + ")<--(n)--(:Association)--()--(:Kingdom) "
+                             "WHERE (m.name <> n.name) "
+                             "AND (e.name = h.name) AND NOT (n)--(:" + levels[j] +
+                             ") AND NOT (m)--(:" + levels[j] +
+                             ")RETURN p,r")).data()
+            if len(result) > 0:
+                pair = result[0]
+                out.append(pair)
+                break
+        return out
+
+    @staticmethod
+    def _unassigned_pairlist(tx, level, mode):
+        """Returns a list of association pairs, where one node
+        has not been assigned the specified taxonomic level.
+        Once these results are returned, the pair is checked for
+        matching taxonomy at higher taxonomic levels;
+        if they match there, the pair is returned. """
+        levels = ['Species', 'Genus', 'Family', 'Order', 'Class', 'Phylum', 'Kingdom']
+        current = levels.index(level)
+        out = list()
+        for j in range(current, 6):
+            if mode == 'weight':
+                result = tx.run(("MATCH p=(e:" + levels[j + 1] +
+                                 ")<--(m)<--(a:Association)-->()--(f:" + level +
+                                 ") MATCH r=(h:" + levels[j + 1] +
+                                 ")<--(n)<--(b:Association)-->()--(g:" + level +
+                                 ") MATCH (x)--(:Network)--(y)"
+                                 " WHERE (a.name <> b.name) AND (a.weight = b.weight) AND "
+                                 "(e.name = h.name) AND (f.name = g.name) "
+                                 "AND (x.name = a.name) AND (y.name = b.name) "
+                                 "AND NOT (n)--(:" + level + ") AND NOT (m)--(:" + level +
+                                 ") RETURN p,r LIMIT 1")).data()
+            else:
+                result = tx.run(("MATCH p=(e:" + levels[j + 1] +
+                                 ")<--(m)<--(a:Association)-->()--(f:" + level +
+                                 ") MATCH r=(h:" + levels[j + 1] +
+                                 ")<--(n)<--(b:Association)-->()--(g:" + level +
+                                 ") MATCH (x)--(:Network)--(y)"
+                                 " WHERE (a.name <> b.name) AND "
+                                 "(e.name = h.name) AND (f.name = g.name) "
+                                 "AND (x.name = a.name) AND (y.name = b.name) "
+                                 "AND NOT (n)--(:" + level + ") AND NOT (m)--(:" + level +
+                                 ") RETURN p,r LIMIT 1")).data()
+            if len(result) > 0:
+                pair = result[0]
+                out.append(pair)
+                break
+            # we can only find taxa that do not have current taxonomic level assigned
+            # next step is to check for each pair if they match at a higher taxonomic level
+            found = False
+            i = 0
+            out = list()
+            if len(result) > 0:
+                while not found and i < len(result):
+                    pair = result[i]
+                    i += 1
+                    j = current + 1
+                    match = False
+                    while not match:
+                        tax1 = pair['p'].nodes[3]
+                        tax2 = pair['r'].nodes[3]
+                        level1 = tx.run(("MATCH (m)--(n:" + levels[j] +
+                                       ") WHERE (m.name = '" + tax1.get('name') + "') RETURN n")).data()
+                        level2 = tx.run(("MATCH (m)--(n:" + levels[j] +
+                                       ") WHERE (m.name = '" + tax2.get('name') + "') RETURN n")).data()
+                        if len(level1) == 0 and len(level2) == 0:
+                            j += 1
+                        elif len(level1) == len(level2):
+                            if level1[0]['n'].get('name') == level1[0]['n'].get('name'):
+                                match = True
+                                found = True
+                                out.append(pair)
+                        else:
+                            match = True
+        return out
+
+    @staticmethod
+    def _find_upper_matches(tx):
+        """Finds matches at higher taxonomic levels than the specified one. """
     @staticmethod
     def _create_agglom(tx):
         """Creates an Agglom_Taxon node and returns its id."""
@@ -259,13 +441,95 @@ class Driver(object):
                             "' CREATE (a)-[r:GENERATED_FROM]->(b) RETURN type(r)"))
 
     @staticmethod
-    def _taxonomy(tx, node, tax, level):
+    def _rewire_associations(tx, node, source1, source2):
+        """Each Agglom_Taxon node is linked to the Taxon node
+        it originated from. If it was generated from an Agglom_Taxon node,
+        that source node's relationships to Taxon nodes are copied to the new node."""
+        old1 = tx.run(("MATCH p=(a)--(:Association) WHERE a.name = '" +
+                           source1.nodes[1].get('name') + "' RETURN p")).data()
+        old2 = tx.run(("MATCH p=(a)--(:Association) WHERE a.name = '" +
+                           source2.nodes[1].get('name') + "' RETURN p")).data()
+        old_links = list()
+        for item in old1:
+            old_links.append(item['p'].nodes[1].get('name'))
+        for item in old2:
+            old_links.append(item['p'].nodes[1].get('name'))
+        tx.run(("MATCH p=(a)-[r:WITH_TAXON]-(:Association) WHERE a.name = '" +
+                source1.nodes[1].get('name') + "' DELETE r"))
+        tx.run(("MATCH p=(a)-[r:WITH_TAXON]-(:Association) WHERE a.name = '" +
+                source2.nodes[1].get('name') + "' DELETE r"))
+        targets = list()
+        weights = list()
+        for assoc in old_links:
+            # first need to check if the old associations are to the same taxa.
+            tx.run(("MATCH (a:Agglom_Taxon),(b:Association) WHERE a.name = '" +
+                    node + "' AND b.name = '" + assoc +
+                    "' CREATE (a)-[r:WITH_TAXON]->(b) RETURN type(r)"))
+        for assoc in old_links:
+            target = tx.run(("MATCH (a:Agglom_Taxon)--(b:Association)--(m) "
+                             "WHERE a.name = '" + node +
+                             "' AND b.name = '" + assoc +
+                             "' AND NOT m:Network RETURN m")).data()
+            weight = tx.run(("MATCH (a:Agglom_Taxon)--(b:Association) "
+                             "WHERE a.name = '" + node +
+                             "' AND b.name = '" + assoc +
+                             "' RETURN b.weight")).data()
+            targets.append(target[0]['m'].get('name'))
+            weights.append(weight[0]['b.weight'])
+        # if there are matching targets, the associations are recombined into 1
+        while len(targets) > 1:
+            item = targets[0]
+            # write function for finding associations that have both matching
+            # targets and matching weights, then merge them
+            indices = [i for i, e in enumerate(targets) if e == item]
+            if len(indices) > 1 and weights[indices[0]] == weights[indices[1]]:
+                # if the weights of the associations with the same targets match
+                # the network links are added to indices[0]
+                # and the association of indices[1] is removed
+                networks_1 = tx.run(("MATCH (a:Association {name: '" + old_links[indices[0]] +
+                                                  "'})--(m:Network) RETURN m")).data()
+                networks_2 = tx.run(("MATCH (a:Association {name: '" + old_links[indices[1]] +
+                                                  "'})--(m:Network) RETURN m")).data()
+                all_networks = networks_1 + networks_2
+                netnames = list()
+                for network in all_networks:
+                    netnames.append(network['m'].get('name'))
+                netnames = list(set(netnames))
+                # first delete all old network relationships of node 0
+                tx.run(("MATCH (a:Association {name: '" + old_links[indices[0]] +
+                                     "'})-[r:IN_NETWORK]->(m:Network) DELETE r"))
+                # next delete matching association from database
+                tx.run(("MATCH (a:Association {name: '" + old_links[indices[1]] +
+                                     "'})-[r:IN_NETWORK]->(m:Network) DETACH DELETE a"))
+                # remove association from old_links, targets and weights
+                del old_links[indices[1]]
+                del targets[indices[1]]
+                del weights[indices[1]]
+                for network in netnames:
+                    tx.run(("MATCH (a:Network),(b:Association) WHERE a.name = '" +
+                                         network + "' AND b.name = '" + old_links[indices[0]] +
+                                         "' CREATE (a)<-[r:IN_NETWORK]-(b) RETURN type(r)"))
+            else:
+                # if the weights do not match, the association is not changed,
+                # but the association is removed from old_links, weights and targets
+                del old_links[0]
+                del targets[0]
+                del weights[0]
+
+
+    @staticmethod
+    def _taxonomy(tx, node, tax, source, level):
         """Adds appropriate taxonomic relationships to taxonomic nodes.
         Generally, if this function returns an error because the 'tree' query
         came up empty, this means the phylogenetic tree was discontinous."""
         tax_list = ['Species', 'Genus', 'Family', 'Order', 'Class', 'Phylum', 'Kingdom']
         rel_list = ['IS_SPECIES', 'IS_GENUS', 'IS_FAMILY', 'IS_ORDER', 'IS_CLASS', 'IS_PHYLUM', 'IS_KINGDOM']
         level_id = tax_list.index(level)
+        # it is possible that the taxonomy has not been assigned at the specified level
+        # in this case, the pattern finds the kingdom
+        # the code below searches for lower taxonomic levels
+        if list(tax.labels)[0] != level:
+            level_id = tax_list.index(list(tax.labels)[0])
         query_list = ["MATCH p=(:Species {name: '" + tax.get('name') +
                       "'})-->(:Genus)-->(:Family)-->(:Order)-->(:Class)-->(:Phylum)-->(:Kingdom) RETURN p",
                       "MATCH p=(:Genus {name: '" + tax.get('name') +
@@ -294,9 +558,11 @@ class Driver(object):
         uid = str(uuid4())
         # non alphanumeric chars break networkx
         if mode is 'weight':
-            tx.run("CREATE (a:Association) SET a.name = $id SET a.weight = $weight", id=uid, weight=weight)
+            tx.run("CREATE (a:Association {name: $id}) SET a.weight = $weight RETURN a",
+                   id=uid, weight=str(weight))
         else:
-            tx.run("CREATE (a:Association) SET a.name = $id", id=uid)
+            tx.run("CREATE (a:Association {name: $id}) RETURN a",
+                   id=uid)
         tx.run(("MATCH (a:Association),(b:Agglom_Taxon) "
                 "WHERE a.name = '" + uid + "' AND b.name = '" +
                 agglom_1 + "' CREATE (a)-[r:WITH_TAXON]->(b) RETURN type(r)"))
@@ -306,7 +572,7 @@ class Driver(object):
         for node in networks:
             tx.run(("MATCH (a:Association),(b:Network) "
                     "WHERE a.name = '" + uid + "' AND b.name = '" +
-                    node.get('name') + "' CREATE (a)-[r:IN_NETWORK]->(b) RETURN type(r)"))
+                    node + "' CREATE (a)-[r:IN_NETWORK]->(b) RETURN type(r)"))
 
     @staticmethod
     def _get_network(tx, nodes):
@@ -314,9 +580,11 @@ class Driver(object):
         all Network nodes those were connected to are returned by this function."""
         networks = list()
         for node in nodes:
-            network = tx.run("MATCH (:Association {name: '" + node.get('name') +
-                             "'})-->(n:Network) RETURN n").data()[0]['n']
-            networks.append(network)
+            all_networks = tx.run("MATCH (:Association {name: '" + node.get('name') +
+                                  "'})-->(n:Network) RETURN n").data()
+            for item in all_networks:
+                networks.append(item['n'].get('name'))
+        networks = list(set(networks))
         return networks
 
     @staticmethod

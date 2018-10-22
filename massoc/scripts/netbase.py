@@ -94,16 +94,17 @@ class ImportDriver(object):
     def export_network(self, path, pairlist=None, mode='basic'):
         # mode = sample removed
         try:
-            g = nx.Graph()
+            g = nx.MultiGraph()
             with self._driver.session() as session:
                 taxon_list = session.read_transaction(self._query,
-                                                      "MATCH (n) WHERE n:Taxon OR n:Agglom_Taxon RETURN n")
+                                                      "MATCH (n)--(:Association) WHERE n:Taxon OR n:Agglom_Taxon RETURN n")
             taxon_list = list(_get_unique(taxon_list, key='n'))
             taxon_dict = dict()
             for i in range(len(taxon_list)):
                 taxon_dict[taxon_list[i]] = str(i)
                 g.add_node(str(i), name=taxon_list[i])
             edge_list = pairlist
+            # the pairlist is given by the graph_union funcs etc
             if not pairlist:
                 with self._driver.session() as session:
                     edge_list = session.read_transaction(self._association_list)
@@ -141,15 +142,15 @@ class ImportDriver(object):
             for type in attrlist:
                 attribute_dict[type] = dict()
                 for taxon in taxon_dict:
-                    attribute_dict[type][taxon_dict[taxon]] = None
+                    attribute_dict[type][taxon_dict[taxon]] = 'None'
             for item in tax_properties:
                 taxon = taxon_dict[item]
                 attributes = tax_properties[item]
                 for type in attributes:
-                    attribute_dict[type][taxon] = attributes[type]
+                    attribute_dict[type][taxon] = str(attributes[type])
             for item in attribute_dict:
                 nx.set_node_attributes(g, attribute_dict[item], item)
-            if mode != 'sample':
+            if mode != 'sample':  # currently no other modes available; sample mode was removed
                 with self._driver.session() as session:
                     sample_properties = session.read_transaction(self._tax_properties, mode='SampleProperty')
                 attribute_dict = dict()
@@ -167,7 +168,7 @@ class ImportDriver(object):
                     taxon = taxon_dict[item]
                     attributes = sample_properties[item]
                     for type in attributes:
-                        attribute_dict[type][taxon] = attributes[type]
+                        attribute_dict[type][taxon] = str(attributes[type])
                 for item in attribute_dict:
                     if item is None:
                         nx.set_node_attributes(g, str(attribute_dict[item]), 'Sample_variables')
@@ -272,30 +273,31 @@ class ImportDriver(object):
                             # first request ID to see if the taxonomy node already exists
                             j += 1
                     for i in range(0, j):
-                        hit = tx.run(("MATCH (a:" + tax_levels[i] +
-                                      " {name: '" + tax_dict[i] +
-                                      "'}) RETURN a")).data()
-                        if len(hit) == 0:
-                            tx.run(("CREATE (a:" + tax_levels[i] +
-                                    " {name: '" + tax_dict[i] +
-                                    "'}) RETURN a")).data()
-                            if i > 0:
-                                tx.run(("MATCH (a:" + tax_levels[i] +
-                                        "), (b:" + tax_levels[i-1] +
-                                        ") WHERE a.name = '" + tax_dict[i] +
-                                        "' AND b.name = '" + tax_dict[i-1] +
-                                        "' CREATE (a)-[r:" + tree_list[i-1] +
-                                        "]->(b) RETURN type(r)"))
-                        hit = tx.run(("MATCH (a:Taxon)-[r]-(b:" + tax_levels[i] +
-                                ") WHERE a.name = '" + taxon +
-                                "' AND b.name = '" + tax_dict[i] +
-                                "' RETURN type(r)")).data()
-                        if len(hit) == 0:
-                            tx.run(("MATCH (a:Taxon), (b:" + tax_levels[i] +
+                        if tax_dict[i] != 'NA':  # maybe allow user input to specify missing values
+                            hit = tx.run(("MATCH (a:" + tax_levels[i] +
+                                          " {name: '" + tax_dict[i] +
+                                          "'}) RETURN a")).data()
+                            if len(hit) == 0:
+                                tx.run(("CREATE (a:" + tax_levels[i] +
+                                        " {name: '" + tax_dict[i] +
+                                        "'}) RETURN a")).data()
+                                if i > 0:
+                                    tx.run(("MATCH (a:" + tax_levels[i] +
+                                            "), (b:" + tax_levels[i-1] +
+                                            ") WHERE a.name = '" + tax_dict[i] +
+                                            "' AND b.name = '" + tax_dict[i-1] +
+                                            "' CREATE (a)-[r:" + tree_list[i-1] +
+                                            "]->(b) RETURN type(r)"))
+                            hit = tx.run(("MATCH (a:Taxon)-[r]-(b:" + tax_levels[i] +
                                     ") WHERE a.name = '" + taxon +
                                     "' AND b.name = '" + tax_dict[i] +
-                                    "' CREATE (a)-[r:" + rel_list[i] +
-                                    "]->(b) RETURN type(r)"))
+                                    "' RETURN type(r)")).data()
+                            if len(hit) == 0:
+                                tx.run(("MATCH (a:Taxon), (b:" + tax_levels[i] +
+                                        ") WHERE a.name = '" + taxon +
+                                        "' AND b.name = '" + tax_dict[i] +
+                                        "' CREATE (a)-[r:" + rel_list[i] +
+                                        "]->(b) RETURN type(r)"))
             else:
                 tx.run("CREATE (a:Taxon) SET a.name = $id", id='Bin')
 
@@ -389,6 +391,7 @@ class ImportDriver(object):
         """Generates all the associations contained in a network and
         connects them to the related network node.
         This function uses NetworkX networks as source."""
+        # creates metadata for eventual CoNet feature associations
         for edge in network.edges:
             taxon1 = edge[0]
             taxon2 = edge[1]
@@ -399,61 +402,106 @@ class ImportDriver(object):
             if 'name' in network.nodes[taxon1]:
                 taxon1 = network.nodes[taxon1]['name']
                 taxon2 = network.nodes[taxon2]['name']
-            if mode == 'weight':
-                network_weight = str(attr['weight'])
-            hit = tx.run(("MATCH p=(:Taxon {name: '" +
-                          taxon1 + "'})<--(:Association)-->(:Taxon {name: '" +
-                          taxon2 + "'}) RETURN p")).data()
-            if mode == 'weight' and len(hit)>0:
-                # need to find the association that not only matches taxon, but also weight
-                for node in hit:
-                    matched_hit = None
-                    database_weight = node['p'].nodes[1].get('weight')
-                    if database_weight == network_weight:
-                        matched_hit = node
+            # for CoNet imports, the taxa can actually be features
+            # need to check this, because these taxa will NOT be in the dataset
+            # in that case, we need to create nodes that represent
+            # the features
+            feature = False
+            if 'isafeature' in network.nodes[edge[0]]:
+                if network.nodes[edge[0]]['isafeature'] == 'yes':
+                    feature = True
+                    # find if TaxonProperty already exists
+                    # otherwise, create it and link to Taxon
+                    hit = tx.run(("MATCH (a:TaxonProperty) WHERE a.type = '" +
+                                  taxon1 + "' AND a.name = '" +
+                                  attr['interactionType'] + "' RETURN a")).data()
+                    if len(hit) == 0:
+                        tx.run(("CREATE (a:TaxonProperty) SET a.type = '" +
+                                      taxon1 + "' SET a.name = '" +
+                                      attr['interactionType'] + "'"))
+                    tx.run(("MATCH (a:Taxon), (b:TaxonProperty) WHERE a.name = '" + taxon2 +
+                            "' AND b.type ='" + taxon1 +
+                            "' AND b.name = '" + attr['interactionType'] +
+                            "' CREATE (a)-[r:HAS_PROPERTY]->(b) RETURN type(r)"))
+                elif network.nodes[edge[1]]['isafeature'] == 'yes':
+                    feature = True
+                    # find if TaxonProperty already exists
+                    # otherwise, create it and link to Taxon
+                    hit = tx.run(("MATCH (a:TaxonProperty) WHERE a.type = '" +
+                                  taxon2 + "' AND a.name = '" +
+                                  attr['interactionType'] + "' RETURN a")).data()
+                    if len(hit) == 0:
+                        tx.run(("CREATE (a:TaxonProperty) SET a.type = '" +
+                                      taxon2 + "' SET a.name = '" +
+                                      attr['interactionType'] + "'"))
+                    tx.run(("MATCH (a:Taxon), (b:TaxonProperty) WHERE a.name = '" + taxon1 +
+                            "' AND b.type ='" + taxon2 +
+                            "' AND b.name = '" + attr['interactionType'] +
+                            "' CREATE (a)-[r:HAS_PROPERTY]->(b) RETURN type(r)"))
+                else:
+                    if mode == 'weight':
+                        network_weight = str(attr['weight'])
+                    hit = tx.run(("MATCH p=(a)<--(:Association)-->(b) "
+                                  "WHERE a.name = '"+ taxon1 +
+                                  "' AND b.name = '" + taxon2 +
+                                  "' RETURN p")).data()
+                    if mode == 'weight' and len(hit)>0:
+                        # need to find the association that not only matches taxon, but also weight
+                        for node in hit:
+                            matched_hit = None
+                            database_weight = node['p'].nodes[1].get('weight')
+                            if database_weight == network_weight:
+                                matched_hit = node
+                            else:
+                                pass
+                        if matched_hit:
+                            hit = list()
+                            hit.append(matched_hit)
+                    # first check if association is already present)
+                    if len(hit) > 0:
+                        for association in hit:
+                            uid = association['p'].nodes[1].get('name')
+                            # first check if there is already a link between the association and network
+                            network_hit = tx.run(("MATCH p=(a:Association)--(b:Network) "
+                                    "WHERE a.name = '" +
+                                    uid +
+                                    "' AND b.name = '" + name +
+                                    "' RETURN p")).data()
+                            if len(network_hit) == 0:
+                                tx.run(("MATCH (a:Association), (b:Network) "
+                                        "WHERE a.name = '" +
+                                        uid +
+                                        "' AND b.name = '" + name +
+                                        "' CREATE (a)-[r:IN_NETWORK]->(b) "
+                                        "RETURN type(r)"))
                     else:
-                        pass
-                if matched_hit:
-                    hit = list()
-                    hit.append(matched_hit)
-            # first check if association is already present)
-            if len(hit) > 0:
-                for association in hit:
-                    uid = association['p'].nodes[1].get('name')
+                        uid = str(uuid4())
+                        # non alphanumeric chars break networkx
+                        if mode == 'weight':
+                            tx.run("CREATE (a:Association {name: $id}) "
+                                   "SET a.weight = $weight "
+                                   "RETURN a", id=uid, weight=str(network_weight))
+                        else:
+                            tx.run("CREATE (a:Association {name: $id}) "
+                                   "RETURN a", id=uid)
+                        tx.run(("MATCH (a:Association), (b:Taxon) "
+                                "WHERE a.name = '" +
+                                uid +
+                                "' AND b.name = '" + taxon1 +
+                                "' CREATE (a)-[r:WITH_TAXON]->(b) "
+                                "RETURN type(r)"))
+                        tx.run(("MATCH (a:Association), (b:Taxon) "
+                                "WHERE a.name = '" +
+                                uid +
+                                "' AND b.name = '" + taxon2 +
+                                "' CREATE (a)-[r:WITH_TAXON]->(b) "
+                                "RETURN type(r)"))
                     tx.run(("MATCH (a:Association), (b:Network) "
                             "WHERE a.name = '" +
                             uid +
                             "' AND b.name = '" + name +
                             "' CREATE (a)-[r:IN_NETWORK]->(b) "
                             "RETURN type(r)"))
-            else:
-                uid = str(uuid4())
-                # non alphanumeric chars break networkx
-                if mode == 'weight':
-                    tx.run("CREATE (a:Association {name: $id}) "
-                           "SET a.weight = $weight "
-                           "RETURN a", id=uid, weight=str(network_weight))
-                else:
-                    tx.run("CREATE (a:Association {name: $id}) "
-                           "RETURN a", id=uid)
-                tx.run(("MATCH (a:Association), (b:Taxon) "
-                        "WHERE a.name = '" +
-                        uid +
-                        "' AND b.name = '" + taxon1 +
-                        "' CREATE (a)-[r:WITH_TAXON]->(b) "
-                        "RETURN type(r)"))
-                tx.run(("MATCH (a:Association), (b:Taxon) "
-                        "WHERE a.name = '" +
-                        uid +
-                        "' AND b.name = '" + taxon2 +
-                        "' CREATE (a)-[r:WITH_TAXON]->(b) "
-                        "RETURN type(r)"))
-            tx.run(("MATCH (a:Association), (b:Network) "
-                    "WHERE a.name = '" +
-                    uid +
-                    "' AND b.name = '" + name +
-                    "' CREATE (a)-[r:IN_NETWORK]->(b) "
-                    "RETURN type(r)"))
 
     @staticmethod
     def _association_list(tx):
@@ -472,10 +520,11 @@ class ImportDriver(object):
                 sublist.append(taxa[0]['m'].get('name'))
                 sublist.append(taxa[0]['n'].get('name'))
                 network = tx.run(("MATCH (:Association {name: '" + assoc['n'].get('name') +
-                               "'})--(n:Network) RETURN n"))
+                               "'})-->(n:Network) RETURN n"))
+                network = _get_unique(network, key='n')
                 network_list = list()
                 for item in network:
-                    network_list.append(item['n'].get('name'))
+                    network_list.append(item)
                 sublist.append(str(network_list))
                 weight = assoc['n'].get('weight')
                 if weight:

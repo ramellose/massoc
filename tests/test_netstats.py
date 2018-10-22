@@ -327,6 +327,8 @@ class TestMain(unittest.TestCase):
         new_assocs = drive.custom_query("MATCH (n:Association) RETURN n")
         self.assertGreater(len(num_assocs), len(new_assocs))
 
+    # should test if network agglomeration also handles taxa that have not been assigned taxonomy
+
     def test_associate_samples_spearman(self):
         """Tests if associations between continuous sample variables and taxa are added.
         The first OTU was adjusted to only occur in skin samples."""
