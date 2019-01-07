@@ -324,9 +324,9 @@ class Driver(object):
         current = levels.index(level)
         out = list()
         for j in range(current, 6):
-            result = tx.run(("MATCH p=(e:" + levels[j+1] + ")--(m)--(:Association)--()--(:Kingdom) "
+            result = tx.run(("MATCH p=(e:" + levels[j+1] + ")--(m)--(:Association)--(k)--(:Kingdom) "
                              "MATCH r=(h:" + levels[j+1] + ")<--(n)--(:Association)--()--(:Kingdom) "
-                             "WHERE (m.name <> n.name) "
+                             "WHERE (m.name <> n.name) AND (k.name <> n.name) "
                              "AND (e.name = h.name) AND NOT (n)--(:" + levels[j] +
                              ") AND NOT (m)--(:" + levels[j] +
                              ")RETURN p,r")).data()
@@ -446,69 +446,92 @@ class Driver(object):
         it originated from. If it was generated from an Agglom_Taxon node,
         that source node's relationships to Taxon nodes are copied to the new node."""
         old1 = tx.run(("MATCH p=(a)--(:Association) WHERE a.name = '" +
-                           source1.nodes[1].get('name') + "' RETURN p")).data()
+                                    source1.nodes[1].get('name') + "' RETURN p")).data()
         old2 = tx.run(("MATCH p=(a)--(:Association) WHERE a.name = '" +
-                           source2.nodes[1].get('name') + "' RETURN p")).data()
+                                    source2.nodes[1].get('name') + "' RETURN p")).data()
         old_links = list()
         for item in old1:
             old_links.append(item['p'].nodes[1].get('name'))
         for item in old2:
             old_links.append(item['p'].nodes[1].get('name'))
+
         tx.run(("MATCH p=(a)-[r:WITH_TAXON]-(:Association) WHERE a.name = '" +
                 source1.nodes[1].get('name') + "' DELETE r"))
         tx.run(("MATCH p=(a)-[r:WITH_TAXON]-(:Association) WHERE a.name = '" +
                 source2.nodes[1].get('name') + "' DELETE r"))
+        old_links = list(set(old_links))  # issue with self loops causing deletion issues
         targets = list()
         weights = list()
+        selfloops = list()
         for assoc in old_links:
             # first need to check if the old associations are to the same taxa.
             tx.run(("MATCH (a:Agglom_Taxon),(b:Association) WHERE a.name = '" +
                     node + "' AND b.name = '" + assoc +
-                    "' CREATE (a)-[r:WITH_TAXON]->(b) RETURN type(r)"))
+                    "' CREATE (a)-[r:WITH_TAXON]->(b) RETURN type(r)")).data()
         for assoc in old_links:
             target = tx.run(("MATCH (a:Agglom_Taxon)--(b:Association)--(m) "
                              "WHERE a.name = '" + node +
                              "' AND b.name = '" + assoc +
                              "' AND NOT m:Network RETURN m")).data()
+            if len(target) == 0:
+                 # this can happen when the target is a loop between
+                 # source1 and source 2
+                 target = tx.run(("MATCH (m:Agglom_Taxon)--(b:Association) "
+                                               "WHERE m.name = '" + node +
+                                               "' AND b.name = '" + assoc +
+                                               "' RETURN m")).data()
+                 tx.run(("MATCH (m:Agglom_Taxon), (b:Association) "
+                                          "WHERE m.name = '" + node +
+                                          "' AND b.name = '" + assoc +
+                                          "' CREATE (m)-[r:WITH_TAXON]->(b) RETURN type(r)"))
             weight = tx.run(("MATCH (a:Agglom_Taxon)--(b:Association) "
                              "WHERE a.name = '" + node +
                              "' AND b.name = '" + assoc +
                              "' RETURN b.weight")).data()
             targets.append(target[0]['m'].get('name'))
             weights.append(weight[0]['b.weight'])
-        # if there are matching targets, the associations are recombined into 1
         while len(targets) > 1:
             item = targets[0]
             # write function for finding associations that have both matching
             # targets and matching weights, then merge them
             indices = [i for i, e in enumerate(targets) if e == item]
-            if len(indices) > 1 and weights[indices[0]] == weights[indices[1]]:
-                # if the weights of the associations with the same targets match
-                # the network links are added to indices[0]
-                # and the association of indices[1] is removed
-                networks_1 = tx.run(("MATCH (a:Association {name: '" + old_links[indices[0]] +
-                                                  "'})--(m:Network) RETURN m")).data()
-                networks_2 = tx.run(("MATCH (a:Association {name: '" + old_links[indices[1]] +
-                                                  "'})--(m:Network) RETURN m")).data()
-                all_networks = networks_1 + networks_2
-                netnames = list()
-                for network in all_networks:
-                    netnames.append(network['m'].get('name'))
-                netnames = list(set(netnames))
-                # first delete all old network relationships of node 0
-                tx.run(("MATCH (a:Association {name: '" + old_links[indices[0]] +
-                                     "'})-[r:IN_NETWORK]->(m:Network) DELETE r"))
-                # next delete matching association from database
-                tx.run(("MATCH (a:Association {name: '" + old_links[indices[1]] +
-                                     "'})-[r:IN_NETWORK]->(m:Network) DETACH DELETE a"))
-                # remove association from old_links, targets and weights
-                del old_links[indices[1]]
-                del targets[indices[1]]
-                del weights[indices[1]]
-                for network in netnames:
-                    tx.run(("MATCH (a:Network),(b:Association) WHERE a.name = '" +
-                                         network + "' AND b.name = '" + old_links[indices[0]] +
-                                         "' CREATE (a)<-[r:IN_NETWORK]-(b) RETURN type(r)"))
+            if len(indices) > 1:
+                matches = list()
+                for i in range(1, len(indices)):
+                    if weights[indices[0]] == weights[indices[i]]:
+                        matches.append(indices[i])
+                if len(matches) == 0:
+                    # this happens if there are matching targets, but not matching weights
+                    del old_links[0]
+                    del targets[0]
+                    del weights[0]
+                for match in matches:
+                    # if the weights of the associations with the same targets match
+                    # the network links are added to indices[0]
+                    # and the association of indices[1] is removed
+                    networks_1 = tx.run(("MATCH (a:Association {name: '" + old_links[indices[0]] +
+                                         "'})--(m:Network) RETURN m")).data()
+                    networks_2 = tx.run(("MATCH (a:Association {name: '" + old_links[match] +
+                                         "'})--(m:Network) RETURN m")).data()
+                    all_networks = networks_1 + networks_2
+                    netnames = list()
+                    for network in all_networks:
+                        netnames.append(network['m'].get('name'))
+                    netnames = list(set(netnames))
+                    # first delete all old network relationships of node 0
+                    tx.run(("MATCH (a:Association {name: '" + old_links[indices[0]] +
+                            "'})-[r:IN_NETWORK]->(m:Network) DELETE r"))
+                    # next delete matching association from database
+                    tx.run(("MATCH (a:Association {name: '" + old_links[match] +
+                            "'}) DETACH DELETE a"))
+                    # remove association from old_links, targets and weights
+                    for network in netnames:
+                        tx.run(("MATCH (a:Network),(b:Association) WHERE a.name = '" +
+                                network + "' AND b.name = '" + old_links[indices[0]] +
+                                "' CREATE (a)<-[r:IN_NETWORK]-(b) RETURN type(r)")).data()
+                    del old_links[match]
+                    del targets[match]
+                    del weights[match]
             else:
                 # if the weights do not match, the association is not changed,
                 # but the association is removed from old_links, weights and targets

@@ -438,64 +438,64 @@ class ImportDriver(object):
                             "' AND b.type ='" + taxon2 +
                             "' AND b.name = '" + attr['interactionType'] +
                             "' CREATE (a)-[r:HAS_PROPERTY]->(b) RETURN type(r)"))
-                else:
-                    if mode == 'weight':
-                        network_weight = str(attr['weight'])
-                    hit = tx.run(("MATCH p=(a)<--(:Association)-->(b) "
-                                  "WHERE a.name = '"+ taxon1 +
-                                  "' AND b.name = '" + taxon2 +
-                                  "' RETURN p")).data()
-                    if mode == 'weight' and len(hit)>0:
-                        # need to find the association that not only matches taxon, but also weight
-                        for node in hit:
-                            matched_hit = None
-                            database_weight = node['p'].nodes[1].get('weight')
-                            if database_weight == network_weight:
-                                matched_hit = node
-                            else:
-                                pass
-                        if matched_hit:
-                            hit = list()
-                            hit.append(matched_hit)
-                    # first check if association is already present)
-                    if len(hit) > 0:
-                        for association in hit:
-                            uid = association['p'].nodes[1].get('name')
-                            # first check if there is already a link between the association and network
-                            network_hit = tx.run(("MATCH p=(a:Association)--(b:Network) "
+            if not feature:
+                if mode == 'weight':
+                    network_weight = str(attr['weight'])
+                hit = tx.run(("MATCH p=(a)<--(:Association)-->(b) "
+                              "WHERE a.name = '"+ taxon1 +
+                              "' AND b.name = '" + taxon2 +
+                              "' RETURN p")).data()
+                if mode == 'weight' and len(hit)>0:
+                    # need to find the association that not only matches taxon, but also weight
+                    for node in hit:
+                        matched_hit = None
+                        database_weight = node['p'].nodes[1].get('weight')
+                        if database_weight == network_weight:
+                            matched_hit = node
+                        else:
+                            pass
+                    if matched_hit:
+                        hit = list()
+                        hit.append(matched_hit)
+                # first check if association is already present)
+                if len(hit) > 0:
+                    for association in hit:
+                        uid = association['p'].nodes[1].get('name')
+                        # first check if there is already a link between the association and network
+                        network_hit = tx.run(("MATCH p=(a:Association)--(b:Network) "
+                                "WHERE a.name = '" +
+                                uid +
+                                "' AND b.name = '" + name +
+                                "' RETURN p")).data()
+                        if len(network_hit) == 0:
+                            tx.run(("MATCH (a:Association), (b:Network) "
                                     "WHERE a.name = '" +
                                     uid +
                                     "' AND b.name = '" + name +
-                                    "' RETURN p")).data()
-                            if len(network_hit) == 0:
-                                tx.run(("MATCH (a:Association), (b:Network) "
-                                        "WHERE a.name = '" +
-                                        uid +
-                                        "' AND b.name = '" + name +
-                                        "' CREATE (a)-[r:IN_NETWORK]->(b) "
-                                        "RETURN type(r)"))
+                                    "' CREATE (a)-[r:IN_NETWORK]->(b) "
+                                    "RETURN type(r)"))
+                else:
+                    uid = str(uuid4())
+                    # non alphanumeric chars break networkx
+                    if mode == 'weight':
+                        tx.run("CREATE (a:Association {name: $id}) "
+                               "SET a.weight = $weight "
+                               "RETURN a", id=uid, weight=str(network_weight))
                     else:
-                        uid = str(uuid4())
-                        # non alphanumeric chars break networkx
-                        if mode == 'weight':
-                            tx.run("CREATE (a:Association {name: $id}) "
-                                   "SET a.weight = $weight "
-                                   "RETURN a", id=uid, weight=str(network_weight))
-                        else:
-                            tx.run("CREATE (a:Association {name: $id}) "
-                                   "RETURN a", id=uid)
-                        tx.run(("MATCH (a:Association), (b:Taxon) "
-                                "WHERE a.name = '" +
-                                uid +
-                                "' AND b.name = '" + taxon1 +
-                                "' CREATE (a)-[r:WITH_TAXON]->(b) "
-                                "RETURN type(r)"))
-                        tx.run(("MATCH (a:Association), (b:Taxon) "
-                                "WHERE a.name = '" +
-                                uid +
-                                "' AND b.name = '" + taxon2 +
-                                "' CREATE (a)-[r:WITH_TAXON]->(b) "
-                                "RETURN type(r)"))
+                        tx.run("CREATE (a:Association {name: $id}) "
+                               "RETURN a", id=uid)
+                    tx.run(("MATCH (a:Association), (b:Taxon) "
+                            "WHERE a.name = '" +
+                            uid +
+                            "' AND b.name = '" + taxon1 +
+                            "' CREATE (a)-[r:WITH_TAXON]->(b) "
+                            "RETURN type(r)"))
+                    tx.run(("MATCH (a:Association), (b:Taxon) "
+                            "WHERE a.name = '" +
+                            uid +
+                            "' AND b.name = '" + taxon2 +
+                            "' CREATE (a)-[r:WITH_TAXON]->(b) "
+                            "RETURN type(r)"))
                     tx.run(("MATCH (a:Association), (b:Network) "
                             "WHERE a.name = '" +
                             uid +

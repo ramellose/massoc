@@ -132,194 +132,6 @@ class Nets(Batch):
             logger.error("Unable to generate filenames", exc_info=True)
         return filenames
 
-    def run_spiec(self, settings=None):
-        """
-        Runs a R executable containing settings for SPIEC-EASI network inference.
-        """
-        if settings is None:
-            path = resource_path('spieceasi.r')
-            path = path.replace('\\', '/')
-        else:
-            path = settings[0]
-            if path[-2:] != '.R':
-                raise ValueError("Please supply an R executable to run SPIEC-EASI.")
-        filenames = self.get_filenames()
-        for x in filenames:
-            try:
-                graphname = filenames[x][:-5] + '_spiec'
-                cmd = "Rscript " + path + " -i " + filenames[x] + " -o " + graphname
-                call(cmd, shell=True)
-                corrtab = pandas.read_csv(graphname, sep='\t', index_col=0)
-                corrtab.columns = corrtab.index
-                corrtab[corrtab > 0] = 1
-                corrtab[corrtab < 0] = -1
-                net = networkx.from_pandas_adjacency(corrtab)
-                net = _add_tax(net, filenames[x])
-                self.networks[("spiec-easi_" + x)] = net
-                call("rm " + graphname, shell=True)
-            except Exception:
-                logger.error("Unable to finish SPIEC-EASI on " + str(x), exc_info=True)
-
-    def run_spar(self, boots=100, pval_threshold=0.001):
-        """
-        Runs python 2.7 SparCC code.
-        """
-        path = list()
-        path.append(self.inputs['spar'][0] + '\\SparCC.py')
-        path.append(self.inputs['spar'][0] + '\\MakeBootstraps.py')
-        path.append(self.inputs['spar'][0] + '\\PseudoPvals.py')
-        print(path)
-        path = [x.replace('\\', '/') for x in path]
-        filenames = self.get_filenames()
-        for x in filenames:
-            try:
-                file = biom.load_table(filenames[x])
-                otu = file.to_tsv()
-                tempname = filenames[x][:-5] + '_otus_sparcc.txt'
-                text_file = open(tempname, 'w')
-                text_file.write(otu[29:])
-                text_file.close()
-                print(tempname)
-                corrs = filenames[x][:-5] + '_spar_corrs.tsv'
-                cov = filenames[x][:-5] + '_spar_cov.tsv'
-                pvals = filenames[x][:-5] + '_spar_pvals.tsv'
-                bootstraps = filenames[x][:-(5 + len(x))] + 'bootstraps'
-                cmd = "python2 " + path[0] + " " + tempname + " -i 5 " +\
-                      " --cor_file " + corrs + " --cov_file " + cov
-                call(cmd, shell=True)
-                call("mkdir " + bootstraps, shell=True)
-                n_bootstraps = str(boots)
-                cmd = "python2 " + path[1] + " " + tempname + " -n " + n_bootstraps + \
-                      " -t /permutation_#.txt -p " + bootstraps
-                call(cmd, shell=True)
-                for i in range(0, int(n_bootstraps)):
-                    permpath = bootstraps + '/permutation_' + str(i) + '.txt'
-                    pvalpath = bootstraps + '/perm_cor_' + str(i) + '.txt'
-                    cmd = "python2 " + path[0] + " " + permpath + " -i 5 " + \
-                          " --cor_file " + pvalpath + " --cov_file " + cov
-                    call(cmd, shell=True)
-                cmd = "python2 " + path[2] + ' ' + corrs + ' ' + bootstraps + \
-                      '/perm_cor_#.txt 5 -o ' + pvals + ' -t two_sided'
-                call(cmd, shell=True)
-                call("rm -rf " + bootstraps, shell=True)
-                call("rm " + tempname, shell=True)
-                call("rm " + cov, shell=True)
-                corrtab = pandas.read_csv(corrs, sep='\t', index_col=0)
-                corrtab.columns = corrtab.index
-                pvaltab = pandas.read_csv(pvals, sep='\t', index_col=0)
-                pvaltab = pvaltab < pval_threshold  # p value threshold for SparCC pseudo p-values
-                corrtab = corrtab.where(pvaltab)
-                corrtab = corrtab.fillna(0)
-                corrtab[corrtab > 0] = 1
-                corrtab[corrtab < 0] = -1
-                net = networkx.from_pandas_adjacency(corrtab)
-                net = _add_tax(net, filenames[x])
-                self.networks[("sparcc_" + x)] = net
-                call("rm " + corrs + " " + pvals +
-                     " " + os.path.dirname(massoc.__file__)[:-6] +
-                     "\cov_mat_SparCC.out", shell=True)
-            except Exception:
-                logger.error("Unable to finish SparCC on " + str(x), exc_info=True)
-
-    def run_conet(self):
-        """
-        Runs a Bash script containing the CoNet Bash commands.
-        Unfortunately, errors produced by CoNet cannot be caught,
-        because the exit status of the script is 0 regardless
-        of CoNet producing a network or not.
-        """
-        path = resource_path('CoNet.sh')
-        path = path.replace('\\', '/')
-        libpath = self.inputs['conet'][0] + '\\lib\\CoNet.jar'
-        libpath = libpath.replace('\\', '/')
-        filenames = self.get_filenames()
-        for x in filenames:
-            try:
-                graphname = filenames[x][:-5] + '_conet.tsv'
-                tempname = filenames[x][:-5] + '_counts_conet.txt'
-                file = biom.load_table(filenames[x])
-                # code below is necessary to fix an issue where CoNet cannot read numerical OTU ids
-                orig_ids = dict()
-                for i in range(len(file.ids(axis='observation'))):
-                    id = file.ids(axis='observation')[i]
-                    orig_ids[("otu-" + str(i))] = id
-                    file.ids(axis='observation')[i] = "otu_" + str(i)
-                otu = file.to_tsv()
-                text_file = open(tempname, 'w')
-                text_file.write(otu[34:])
-                text_file.close()
-                # Code below removed because taxonomic information is not necessary
-                # tax = file._observation_metadata
-                # for species in tax:
-                #    species.pop('Genus (Aggregated)', None)
-                #    species.pop('collapsed_ids', None)
-                # tax = file.metadata_to_dataframe('observation')
-                # num = tax.shape[1]
-                # for i in range(num, 7):
-                #    level = 'taxonomy_' + str(i)
-                #    tax[level] = 'Merged'
-                #tax.to_csv(taxname, sep="\t")
-                #f = open(taxname, 'r')
-                #lines = f.read()
-                #f.close()
-                #lines = 'id' + lines
-                #f = open(taxname, 'w')
-                #f.write(lines)
-                #f.close()
-                # solving issue where guessingparam is higher than maximum edge number
-                n_otus = file.shape[0]
-                guessingparam = str(n_otus * n_otus -1)
-                if int(guessingparam) > 1000:
-                    guessingparam = str(1000)
-                cmd = path + ' ' + tempname + ' ' + ' ' + graphname + ' ' + libpath + \
-                      ' ' + filenames[x][:-5] + ' ' + guessingparam
-                print(cmd)
-                call(cmd, shell=True)
-                call("rm " + tempname + " " + " " + filenames[x][:-5] + "_threshold" + " " +
-                    filenames[x][:-5] + "_permnet", shell=True)
-                print(graphname)
-                with open(graphname, 'r') as fin:
-                    data = fin.read().splitlines(True)
-                    fin.close()
-                with open(graphname, 'w') as fout:
-                    fout.writelines(data[2:])
-                    fout.close()
-                signs = [x[0] for x in csv.reader(open(graphname, 'r'), delimiter='\t')]
-                signs = [word.replace('mutualExclusion', '-1') for word in signs]
-                signs = [word.replace('copresence', '1') for word in signs]
-                signs = [word.replace('unknown', 'None') for word in signs]
-                signs = [ast.literal_eval(x) for x in signs]
-                clean_signs = list()  # None values need to be removed to make sure median is not 0.5.
-                for sublist in signs:
-                    cleaned = [elem for elem in sublist if elem is not None]
-                    clean_signs.append(cleaned)
-                signs = [statistics.median(x) for x in clean_signs]
-                # methods = [x[2] for x in csv.reader(open(graphname, 'r'), delimiter='\t')]
-                names = [x[15] for x in csv.reader(open(graphname, 'r'), delimiter='\t')]
-                names = [x.split('->') for x in names]
-                new_names = list()
-                for item in names:
-                    new_item = [x.replace(x, orig_ids[x]) for x in item]
-                    new_names.append(new_item)
-                file = biom.load_table(filenames[x])
-                i = 0
-                allspecies = file._observation_ids
-                adj = pandas.DataFrame(index=allspecies, columns=allspecies)
-                adj = adj.fillna(0)
-                for name in new_names:
-                    id1 = adj.columns.get_loc(name[0])
-                    id2 = adj.columns.get_loc(name[1])
-                    sign = signs[i]
-                    i = i+1
-                    adj.iloc[id1, id2] = sign
-                    adj.iloc[id2, id1] = sign
-                net = networkx.from_pandas_adjacency(adj)
-                net = _add_tax(net, filenames[x])
-                self.networks[("conet_" + x)] = net
-                call ("rm " + graphname, shell=True)
-            except Exception:
-                logger.error("Unable to finish CoNet on " + str(x), exc_info=True)
-
     def write_networks(self):
         """
         Writes all networks in a Nets file to graphml files.
@@ -357,6 +169,46 @@ class Nets(Batch):
         else:
             self.network[filename] = network
 
+    def _prepare_conet(self):
+        """Carries out initial work before actually running CoNet.
+        The initial writing function cannot be carried out
+        in a multiprocessing operation because the Biom object cannot be pickled.
+        However, the bash calls can be pickled; therefore, initial data prep
+        is done first, then the CoNet calls are in parallel. """
+        filenames = self.get_filenames()
+        ids = dict.fromkeys(filenames)
+        obs_ids = dict.fromkeys(filenames)
+        for x in filenames:
+            tempname = filenames[x][:-5] + '_counts_conet.txt'
+            file = biom.load_table(filenames[x])
+            # code below is necessary to fix an issue where CoNet cannot read numerical OTU ids
+            orig_ids = dict()
+            for i in range(len(file.ids(axis='observation'))):
+                id = file.ids(axis='observation')[i]
+                orig_ids[("otu-" + str(i))] = id
+                file.ids(axis='observation')[i] = "otu_" + str(i)
+            otu = file.to_tsv()
+            text_file = open(tempname, 'w')
+            text_file.write(otu[34:])
+            text_file.close()
+            ids[x] = orig_ids
+            obs_ids[x] = file._observation_ids
+        return ids, obs_ids
+
+    def _prepare_spar(self):
+        """Carries out initial work before actually running SparCC.
+        The initial writing function cannot be carried out
+        in a multiprocessing operation because the Biom object cannot be pickled.
+        However, the bash calls can be pickled; therefore, initial data prep
+        is done first, then the SparCC calls are in parallel. """
+        filenames = self.get_filenames()
+        for x in filenames:
+            file = biom.load_table(filenames[x])
+            otu = file.to_tsv()
+            tempname = filenames[x][:-5] + '_otus_sparcc.txt'
+            text_file = open(tempname, 'w')
+            text_file.write(otu[29:])
+            text_file.close()
 
 def _add_tax(network, file):
     """
@@ -383,3 +235,178 @@ def _add_tax(network, file):
     except Exception:
         logger.error("Unable to collect taxonomy for agglomerated files", exc_info=True)
     return network
+
+
+def run_conet(filenames, conet, orig_ids, obs_ids):
+    """
+    Runs a Bash script containing the CoNet Bash commands.
+    Unfortunately, errors produced by CoNet cannot be caught,
+    because the exit status of the script is 0 regardless
+    of CoNet producing a network or not.
+    conet = nets.inputs['conet'][0
+    """
+    path = resource_path('CoNet.sh')
+    path = path.replace('\\', '/')
+    libpath = conet + '\\lib\\CoNet.jar'
+    libpath = libpath.replace('\\', '/')
+    results = dict()
+    for x in filenames:
+        try:
+            graphname = filenames[x][:-5] + '_conet.tsv'
+            tempname = filenames[x][:-5] + '_counts_conet.txt'
+            # Code below removed because taxonomic information is not necessary
+            # tax = file._observation_metadata
+            # for species in tax:
+            #    species.pop('Genus (Aggregated)', None)
+            #    species.pop('collapsed_ids', None)
+            # tax = file.metadata_to_dataframe('observation')
+            # num = tax.shape[1]
+            # for i in range(num, 7):
+            #    level = 'taxonomy_' + str(i)
+            #    tax[level] = 'Merged'
+            #tax.to_csv(taxname, sep="\t")
+            #f = open(taxname, 'r')
+            #lines = f.read()
+            #f.close()
+            #lines = 'id' + lines
+            #f = open(taxname, 'w')
+            #f.write(lines)
+            #f.close()
+            # solving issue where guessingparam is higher than maximum edge number
+            n_otus = len(orig_ids[x])
+            guessingparam = str(n_otus * n_otus -1)
+            if int(guessingparam) > 1000:
+                guessingparam = str(1000)
+            cmd = path + ' ' + tempname + ' ' + ' ' + graphname + ' ' + libpath + \
+                  ' ' + filenames[x][:-5] + ' ' + guessingparam
+            print(cmd)
+            call(cmd, shell=True)
+            call("rm " + tempname + " " + " " + filenames[x][:-5] + "_threshold" + " " +
+                filenames[x][:-5] + "_permnet", shell=True)
+            print(graphname)
+            with open(graphname, 'r') as fin:
+                data = fin.read().splitlines(True)
+                fin.close()
+            with open(graphname, 'w') as fout:
+                fout.writelines(data[2:])
+                fout.close()
+            signs = [x[0] for x in csv.reader(open(graphname, 'r'), delimiter='\t')]
+            signs = [word.replace('mutualExclusion', '-1') for word in signs]
+            signs = [word.replace('copresence', '1') for word in signs]
+            signs = [word.replace('unknown', 'None') for word in signs]
+            signs = [ast.literal_eval(x) for x in signs]
+            clean_signs = list()  # None values need to be removed to make sure median is not 0.5.
+            for sublist in signs:
+                cleaned = [elem for elem in sublist if elem is not None]
+                clean_signs.append(cleaned)
+            signs = [statistics.median(x) for x in clean_signs]
+            # methods = [x[2] for x in csv.reader(open(graphname, 'r'), delimiter='\t')]
+            names = [x[15] for x in csv.reader(open(graphname, 'r'), delimiter='\t')]
+            names = [x.split('->') for x in names]
+            new_names = list()
+            for item in names:
+                new_item = [x.replace(x, orig_ids[x]) for x in item]
+                new_names.append(new_item)
+            i = 0
+            adj = pandas.DataFrame(index=obs_ids[x], columns=obs_ids[x])
+            adj = adj.fillna(0)
+            for name in new_names:
+                id1 = adj.columns.get_loc(name[0])
+                id2 = adj.columns.get_loc(name[1])
+                sign = signs[i]
+                i = i+1
+                adj.iloc[id1, id2] = sign
+                adj.iloc[id2, id1] = sign
+            net = networkx.from_pandas_adjacency(adj)
+            net = _add_tax(net, filenames[x])
+            results[("conet_" + x)] = net
+            call ("rm " + graphname, shell=True)
+        except Exception:
+            logger.error("Unable to finish CoNet on " + str(x), exc_info=True)
+    return results
+
+def run_spiec(filenames, settings=None):
+    """
+    Runs a R executable containing settings for SPIEC-EASI network inference.
+    """
+    results = dict()
+    if settings is None:
+        path = resource_path('spieceasi.r')
+        path = path.replace('\\', '/')
+    else:
+        path = settings[0]
+        if path[-2:] != '.R':
+            raise ValueError("Please supply an R executable to run SPIEC-EASI.")
+    for x in filenames:
+        try:
+            graphname = filenames[x][:-5] + '_spiec'
+            cmd = "Rscript " + path + " -i " + filenames[x] + " -o " + graphname
+            call(cmd, shell=True)
+            corrtab = pandas.read_csv(graphname, sep='\t', index_col=0)
+            corrtab.columns = corrtab.index
+            corrtab[corrtab > 0] = 1
+            corrtab[corrtab < 0] = -1
+            net = networkx.from_pandas_adjacency(corrtab)
+            net = _add_tax(net, filenames[x])
+            results[("spiec-easi_" +x)] = net
+            call("rm " + graphname, shell=True)
+        except Exception:
+            logger.error("Unable to finish SPIEC-EASI on " + str(x), exc_info=True)
+    return results
+
+def run_spar(filenames, spar, boots=100, pval_threshold=0.001):
+    """
+    Runs python 2.7 SparCC code.
+    spar = nets.inputs['spar'][0]
+    """
+    path = list()
+    path.append(spar + '\\SparCC.py')
+    path.append(spar + '\\MakeBootstraps.py')
+    path.append(spar + '\\PseudoPvals.py')
+    path = [x.replace('\\', '/') for x in path]
+    results = dict()
+    for x in filenames:
+        try:
+            tempname = filenames[x][:-5] + '_otus_sparcc.txt'
+            corrs = filenames[x][:-5] + '_spar_corrs.tsv'
+            cov = filenames[x][:-5] + '_spar_cov.tsv'
+            pvals = filenames[x][:-5] + '_spar_pvals.tsv'
+            bootstraps = filenames[x][:-(5 + len(x))] + 'bootstraps'
+            cmd = "python2 " + path[0] + " " + tempname + " -i 5 " +\
+                  " --cor_file " + corrs + " --cov_file " + cov
+            call(cmd, shell=True)
+            call("mkdir " + bootstraps, shell=True)
+            n_bootstraps = str(boots)
+            cmd = "python2 " + path[1] + " " + tempname + " -n " + n_bootstraps + \
+                  " -t /permutation_#.txt -p " + bootstraps
+            call(cmd, shell=True)
+            for i in range(0, int(n_bootstraps)):
+                permpath = bootstraps + '/permutation_' + str(i) + '.txt'
+                pvalpath = bootstraps + '/perm_cor_' + str(i) + '.txt'
+                cmd = "python2 " + path[0] + " " + permpath + " -i 5 " + \
+                      " --cor_file " + pvalpath + " --cov_file " + cov
+                call(cmd, shell=True)
+            cmd = "python2 " + path[2] + ' ' + corrs + ' ' + bootstraps + \
+                  '/perm_cor_#.txt 5 -o ' + pvals + ' -t two_sided'
+            call(cmd, shell=True)
+            call("rm -rf " + bootstraps, shell=True)
+            call("rm " + tempname, shell=True)
+            call("rm " + cov, shell=True)
+            corrtab = pandas.read_csv(corrs, sep='\t', index_col=0)
+            corrtab.columns = corrtab.index
+            pvaltab = pandas.read_csv(pvals, sep='\t', index_col=0)
+            pvaltab = pvaltab < pval_threshold  # p value threshold for SparCC pseudo p-values
+            corrtab = corrtab.where(pvaltab)
+            corrtab = corrtab.fillna(0)
+            corrtab[corrtab > 0] = 1
+            corrtab[corrtab < 0] = -1
+            net = networkx.from_pandas_adjacency(corrtab)
+            net = _add_tax(net, filenames[x])
+            results[("sparcc_" + x)] = net
+            call("rm " + corrs + " " + pvals +
+                 " " + os.path.dirname(massoc.__file__)[:-6] +
+                 "\cov_mat_SparCC.out", shell=True)
+        except Exception:
+            logger.error("Unable to finish SparCC on " + str(x), exc_info=True)
+    return results
+

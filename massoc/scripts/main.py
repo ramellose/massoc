@@ -19,7 +19,7 @@ from functools import partial
 import os
 from biom import load_table
 from biom.parse import MetadataMap
-import multiprocessing
+import multiprocessing as mp
 from massoc.scripts.batch import Batch
 import massoc
 from subprocess import call
@@ -216,6 +216,7 @@ def get_input(argv):
     print(inputs)
     return inputs
 
+
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller.
      Source: https://stackoverflow.com/questions/7674790/bundling-data-files-with-pyinstaller-onefile"""
@@ -327,6 +328,7 @@ def run_jobs(nets, job):
     Accepts a job from a joblist to run network inference in parallel.
     """
     nets.inputs['levels'] = [list(job.values())[0]]
+    filenames = nets.get_filenames()
     if 'spiec-easi' in job:
         sys.stdout.write('Running SPIEC-EASI...')
         sys.stdout.flush()
@@ -422,12 +424,14 @@ def run_parallel(nets):
                 txt = file.read().splitlines()
                 nets.log['spiec-easi'] = {'method': txt[31], 'stars': txt[33][-36:]}
                 nets.log['spiec-easi']['level'] = item[key]
-    # func = partial(run_jobs, nets)
-    # pool = Pool(cores)
+    func = partial(run_jobs, nets)
+    pool = mp.Pool(cores)
     # multiprocess supports passing objects
     # multiprocessing does not
     # however, multiprocess cannot be frozen
     # need to rewrite netwrap as pickle-able objects!
+    nets._prepare_conet()
+    nets._prepare_spar()
     try:
         sys.stdout.write('Distributing jobs...')
         sys.stdout.flush()
@@ -435,7 +439,7 @@ def run_parallel(nets):
         for job in jobs:
             result = run_jobs(nets, job)
             network_list.append(result)
-        # results = pool.map(func, iter(jobs))
+        results = pool.map(func, iter(jobs))
     except Exception:
         logger.error('Failed to generate workers', exc_info=True)
     for item in network_list:
