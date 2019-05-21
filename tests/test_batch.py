@@ -122,7 +122,7 @@ ae", "g__Escherichia", "s__"]}}
     }
 """
 
-testbiom = {"test": biom.parse.parse_biom_table(testraw)}
+testbiom = {'otu': {"test": biom.parse.parse_biom_table(testraw)}}
 
 
 class TestBatch(unittest.TestCase):
@@ -138,8 +138,9 @@ class TestBatch(unittest.TestCase):
                   'otu_table': ['otu_bananas.txt'],
                   'prefix': None,
                   'sample_data': None,
-                  'split': ['BODY_SITE'],
-                  'tax_table': ['tax_bananas.txt']}
+                  'split': 'BODY_SITE',
+                  'tax_table': ['tax_bananas.txt'],
+                  'name': ['test']}
         batch = Batch(deepcopy(testbiom), inputs)
         batch.split_biom()
         self.assertEqual(len(batch.otu), 3)
@@ -156,7 +157,8 @@ class TestBatch(unittest.TestCase):
                   'sample_data': None,
                   'split': 'Rocket Science',
                   'tax_table': ['tax_bananas.txt'],
-                  'prev': ['40']}
+                  'prev': 40,
+                  'name': ['test']}
         batch = Batch(deepcopy(testbiom), inputs)
         batch.prev_filter()
         self.assertEqual(batch.otu['test'].shape[0], 4)
@@ -172,7 +174,8 @@ class TestBatch(unittest.TestCase):
                   'sample_data': None,
                   'split': ['BODY_SITE'],
                   'tax_table': ['tax_bananas.txt'],
-                  'fp': [(os.path.dirname(massoc.__file__)[:-6] + 'tests')],
+                  'levels': ['otu', 'genus'],
+                  'fp': (os.path.dirname(massoc.__file__)[:-6] + 'tests'),
                   'name': ['test']}
         batch = Batch(testbiom, inputs)
         batch.collapse_tax()
@@ -188,7 +191,8 @@ class TestBatch(unittest.TestCase):
                   'prefix': None,
                   'sample_data': None,
                   'split': 'Rocket Science',
-                  'tax_table': ['tax_bananas.txt']}
+                  'tax_table': ['tax_bananas.txt'],
+                  'name': ['test']}
         batch = Batch(testbiom, inputs)
         clrbatch = batch.normalize_transform(mode="clr")
         self.assertFalse(batch.otu['test'] == clrbatch.otu['test'])
@@ -198,48 +202,34 @@ class TestBatch(unittest.TestCase):
         a biom file and split the file into multiple
         subsets of the data?"""
         inputs = {'biom_file': None,
-                  'cluster': ['K-means'],
-                  'nclust': ['2'],
+                  'cluster': 'K-means',
+                  'nclust': 2,
                   'otu_meta': None,
                   'otu_table': ['otu_bananas.txt'],
                   'prefix': None,
                   'sample_data': None,
-                  'split': ['TRUE'],
-                  'tax_table': ['tax_bananas.txt']}
+                  'split': 'TRUE',
+                  'tax_table': ['tax_bananas.txt'],
+                  'name': ['test']}
+        np.random.seed(8888)
         batch = Batch(deepcopy(testbiom), inputs)
         batch.cluster_biom()
         self.assertEqual(len(batch.otu), 3)
-
-    def test_cluster_bioms_gaussian(self):
-        """Does 'cluster_bioms.py' correctly cluster
-        a biom file and split the file into multiple
-        subsets of the data?"""
-        inputs = {'biom_file': None,
-                  'cluster': ['Gaussian'],
-                  'otu_meta': None,
-                  'nclust': ['4'],
-                  'otu_table': ['otu_bananas.txt'],
-                  'prefix': None,
-                  'sample_data': None,
-                  'split': None,
-                  'tax_table': ['tax_bananas.txt']}
-        batch = Batch(deepcopy(testbiom), inputs)
-        batch.cluster_biom()
-        self.assertEqual(len(batch.otu), 1)
 
     def test_cluster_bioms_spectral(self):
         """Does 'cluster_bioms.py' correctly cluster
         a biom file and split the file into multiple
         subsets of the data?"""
         inputs = {'biom_file': None,
-                  'cluster': ['Spectral'],
+                  'cluster': 'Spectral',
                   'otu_meta': None,
-                  'nclust': ['4'],
+                  'nclust': 4,
                   'otu_table': ['otu_bananas.txt'],
                   'prefix': None,
                   'sample_data': None,
-                  'split': ['TRUE'],
-                  'tax_table': ['tax_bananas.txt']}
+                  'split': 'TRUE',
+                  'tax_table': ['tax_bananas.txt'],
+                  'name': ['test']}
         batch = Batch(deepcopy(testbiom), inputs)
         np.random.seed(8888)
         batch.cluster_biom()
@@ -250,32 +240,34 @@ class TestBatch(unittest.TestCase):
         learning function, it should NOT be returned
         as normalized count data."""
         inputs = {'biom_file': None,
-                  'cluster': ['K-means'],
+                  'cluster': 'K-means',
                   'otu_meta': None,
-                  'nclust': ['4'],
+                  'nclust': 4,
                   'otu_table': ['otu_bananas.txt'],
                   'prefix': None,
                   'sample_data': None,
                   'split': None,
-                  'tax_table': ['tax_bananas.txt']}
+                  'tax_table': ['tax_bananas.txt'],
+                  'name': ['test']}
         batch = Batch(deepcopy(testbiom), inputs)
         batch.cluster_biom()
-        self.assertEqual(batch.otu['test']._data[1, 1], testbiom['test']._data[1, 1])
+        self.assertEqual(batch.otu['test']._data[1, 1], testbiom['otu']['test']._data[1, 1])
 
     def test_rarefy(self):
         """The rarefaction function should
         remove samples below a certain read count and then perform rarefaction.
         """
         inputs = {'biom_file': None,
-                  'cluster': ['K-means'],
+                  'cluster': 'K-means',
                   'otu_meta': None,
-                  'nclust': ['4'],
+                  'nclust': 4,
                   'otu_table': ['otu_bananas.txt'],
                   'prefix': None,
                   'sample_data': None,
                   'split': None,
                   'tax_table': ['tax_bananas.txt'],
-                  'rar': ['True']}
+                  'rar': 'True',
+                  'name': ['test']}
         batch = Batch(deepcopy(testbiom), inputs)
         rawsums = batch.otu['test'].sum(axis='sample')
         batch.rarefy()
@@ -295,8 +287,9 @@ class TestBatch(unittest.TestCase):
                   'split': None,
                   'tax_table': ['tax_bananas.txt'],
                   'rar': ['True'],
-                  'min': ['3'],
-                  'prev': None}
+                  'min': 3,
+                  'prev': None,
+                  'name': ['test']}
         batch = Batch(deepcopy(testbiom), inputs)
         rawsums = batch.otu['test'].sum(axis='observation')
         batch.prev_filter(mode='min')
@@ -307,14 +300,15 @@ class TestBatch(unittest.TestCase):
         """Does the prevalence filter remove the correct taxon?"""
         inputs = {'biom_file': None,
                   'cluster': 'Affinity',
-                  'nclust': ['4'],
+                  'nclust': 4,
                   'otu_meta': None,
                   'otu_table': ['otu_bananas.txt'],
                   'prefix': None,
                   'sample_data': None,
                   'split': 'Rocket Science',
                   'tax_table': ['tax_bananas.txt'],
-                  'prev': ['40']}
+                  'prev': 40,
+                  'name': ['test']}
         batch = Batch(deepcopy(testbiom), inputs)
         rawtable = batch.otu['test'].matrix_data
         batch.prev_filter(mode='prev')
@@ -328,15 +322,16 @@ class TestBatch(unittest.TestCase):
         number?
         """
         inputs = {'biom_file': None,
-                  'cluster': ['K-means'],
+                  'cluster': 'K-means',
                   'otu_meta': None,
-                  'nclust': ['4'],
+                  'nclust': 4,
                   'otu_table': ['otu_bananas.txt'],
                   'prefix': None,
                   'sample_data': None,
                   'split': None,
                   'tax_table': ['tax_bananas.txt'],
-                  'rar': ['3']}
+                  'rar': 3,
+                  'name': ['test']}
         batch = Batch(deepcopy(testbiom), inputs)
         batch.rarefy()
         newsums = batch.otu['test'].sum(axis='sample')

@@ -13,13 +13,12 @@ import random
 import unittest
 
 import biom
-from massoc.scripts.batch import Batch
-from massoc.scripts.netwrap import Nets
+from pathlib import Path
 from biom.cli.util import write_biom_table
 from subprocess import call
 import massoc
-from massoc.scripts.main import combine_data, run_jobs, run_massoc, run_parallel, get_joblist
-
+from run_massoc import get_input, run_network, \
+    run_neo4j, run_netstats
 random.seed(7)
 
 testloc = list()
@@ -127,26 +126,6 @@ ae", "g__Escherichia", "s__"]}}
 """
 
 testbiom = {"test": biom.parse.parse_biom_table(testraw)}
-inputs = {'biom_file': None,
-          'cluster': None,
-          'otu_meta': None,
-          'prefix': None,
-          'sample_data': None,
-          'split': None,
-          'tax_table': None,
-          'fp': testloc,
-          'name': ['test'],
-          'otu_table': None,
-          'tools': ['spiec-easi'],
-          'spiec': None,
-          'conet': None,
-          'spar': None,
-          'spar_pval': None,
-          'spar_boot': None,
-          'levels': ['otu', 'order'],
-          'prev': ['20'],
-          'cores': ['4'],
-          'neo4j': [(os.path.dirname(massoc.__file__)[:-6] + 'tests\\neo4j')]}
 
 
 class TestMain(unittest.TestCase):
@@ -157,10 +136,10 @@ class TestMain(unittest.TestCase):
     we should have a checked dataset with known outputs to make sure inference is run correctly.
     """
 
-    def test_combine_data(self):
+    def test_get_input(self):
         """
-        Checks whether combine_data returns
-        a batch object if inputs are supplied.
+        Checks whether get_input writes a settings file
+        if inputs are supplied.
         """
         inputs = {'biom_file': [(testloc[0]+'/data/test.biom')],
                   'cluster': None,
@@ -169,7 +148,7 @@ class TestMain(unittest.TestCase):
                   'sample_data': None,
                   'split': None,
                   'tax_table': None,
-                  'fp': [testloc[0]],
+                  'fp': testloc[0],
                   'otu_table': None,
                   'tools': ['spiec-easi', 'conet'],
                   'spiec': None,
@@ -177,20 +156,24 @@ class TestMain(unittest.TestCase):
                   'spar_pval': None,
                   'spar_boot': None,
                   'levels': ['family'],
-                  'prev': ['20'],
+                  'prev': 20,
                   'min': None,
                   'rar': None,
                   'name': ['test'],
                   'cores': None}
         write_biom_table(testbiom['test'], fmt='hdf5', filepath=(inputs['biom_file'][0]))
-        bioms = combine_data(inputs)
+        get_input(inputs)
+        test = Path(inputs['fp'] + "/settings.json")
+        self.assertTrue(test.is_file())
         call(("rm " + inputs['biom_file'][0]))
-        self.assertEqual(len(bioms.otu), 1)
+        call(("rm " + inputs['fp'] + "/settings.json"))
+        call(("rm " + inputs['fp'] + "/test_family.hdf5"))
+        call(("rm " + inputs['fp'] + "/test_otu.hdf5"))
 
-    def test_combine_data_error(self):
+    def test_get_input_error(self):
         """
-        Checks whether combine_data returns an error
-        if the split variable is not in the medata.
+        Checks whether the get_input pipe reports an error
+        if no files are submitted.
         """
         inputs = {'biom_file': None,
                   'cluster': None,
@@ -213,10 +196,13 @@ class TestMain(unittest.TestCase):
                   'name': ['test'],
                   'cores': None}
         with self.assertRaises(ValueError):
-            bioms = combine_data(inputs)
+            get_input(inputs)
 
-    def test_run_massoc(self):
-        """Checks if the run_massoc function can run."""
+    def test_run_network(self):
+        """
+        Checks whether combine_data returns
+        a batch object if inputs are supplied.
+        """
         inputs = {'biom_file': [(testloc[0]+'/data/test.biom')],
                   'cluster': None,
                   'otu_meta': None,
@@ -224,128 +210,156 @@ class TestMain(unittest.TestCase):
                   'sample_data': None,
                   'split': None,
                   'tax_table': None,
-                  'fp': [testloc[0]],
+                  'fp': testloc[0],
                   'otu_table': None,
-                  'tools': ['conet'],
-                  'spiec': None,
-                  'spar_pval': None,
-                  'spar_boot': None,
-                  'levels': ['otu'],
-                  'prev': ['20'],
-                  'name': ['test'],
-                  'cores': None,
-                  'min': ['10'],
-                  'rar': None,
-                  'conet': [(os.path.dirname(massoc.__file__)[:-6] + 'tests\\CoNet3')]}
-        write_biom_table(testbiom['test'], fmt='hdf5', filepath=(inputs['biom_file'][0]))
-        networks = run_massoc(inputs, mode=None)
-        call(("rm " + inputs['biom_file'][0]))
-        self.assertEqual(len(networks.networks), 1)
-
-
-    def test_get_joblist(self):
-        """
-        Checks whether the joblist function
-        returns a joblist in the appropriate format:
-        list of dicts with each only 1 key.
-        """
-        inputs = {'biom_file': None,
-                  'cluster': None,
-                  'otu_meta': None,
-                  'prefix': None,
-                  'sample_data': None,
-                  'split': None,
-                  'tax_table': [(testloc[0] + 'otu_tax.txt')],
-                  'fp': [testloc[0]],
-                  'otu_table': [(testloc[0] + 'otu_otus.txt')],
                   'tools': ['spiec-easi', 'conet'],
-                  'spiec': ['somefile.txt'],
-                  'conet': None,
+                  'spiec': None,
+                  'spar': None,
+                  'conet': (os.path.dirname(massoc.__file__)[:-6] + 'tests\\CoNet3'),
+                  'conet_bash': None,
                   'spar_pval': None,
                   'spar_boot': None,
-                  'levels': ['family', 'class'],
-                  'prev': ['20'],
+                  'levels': ['family'],
+                  'prev': 20,
+                  'min': None,
+                  'rar': None,
                   'name': ['test'],
                   'cores': None}
-        batch = Batch(testbiom, inputs)
-        netbatch = Nets(batch)
-        jobs = get_joblist(netbatch)
-        self.assertEqual(len(jobs), 6)
+        write_biom_table(testbiom['test'], fmt='hdf5', filepath=(inputs['biom_file'][0]))
+        get_input(inputs)
+        inputs['settings'] = inputs['fp'] + '/settings.json'
+        run_network(inputs)
+        test = Path(inputs['fp'] + "/conet_family_test.txt")
+        self.assertTrue(test.is_file())
+        call(("rm " + inputs['biom_file'][0]))
+        call(("rm " + inputs['fp'] + "/settings.json"))
+        call(("rm " + inputs['fp'] + "/test_family.hdf5"))
+        call(("rm " + inputs['fp'] + "/test_otu.hdf5"))
+        call(("rm " + inputs['fp'] + "/conet_test_family.txt"))
+        call(("rm " + inputs['fp'] + "/spiec-easi_test_family.txt"))
 
-
-    def test_run_jobs(self):
+    def test_run_neo4j(self):
         """
-        Checks whether run_jobs really returns only 1 network.
+        Checks whether combine_data returns
+        a batch object if inputs are supplied.
         """
-        inputs = {'biom_file': None,
+        inputs = {'biom_file': [(testloc[0]+'/data/test.biom')],
                   'cluster': None,
                   'otu_meta': None,
                   'prefix': None,
                   'sample_data': None,
                   'split': None,
-                  'tax_table': [(testloc[0][:-17] + 'otu_tax.txt')],
-                  'fp': [testloc[0]+'/data'],
-                  'otu_table': [(testloc[0][:-17] + 'otu_otus.txt')],
-                  'tools': ['conet'],
+                  'tax_table': None,
+                  'fp': testloc[0],
+                  'otu_table': None,
+                  'tools': ['spiec-easi', 'conet'],
                   'spiec': None,
-                  'conet': [(os.path.dirname(massoc.__file__)[:-6] + 'tests\\CoNet3')],
+                  'spar': None,
+                  'conet_bash': None,
+                  'conet': (os.path.dirname(massoc.__file__)[:-6] + 'tests\\CoNet3'),
                   'spar_pval': None,
                   'spar_boot': None,
                   'levels': ['family'],
-                  'prev': ['20'],
+                  'prev': 20,
+                  'min': None,
+                  'rar': None,
                   'name': ['test'],
                   'cores': None,
-                  'min': ['10']}
-        batch = Batch(testbiom, inputs)
-        netbatch = Nets(batch)
-        jobs = get_joblist(netbatch)
-        netbatch.collapse_tax()
-        netbatch.write_bioms()
-        network = run_jobs(netbatch, jobs[0])
-        x = inputs['name'][0]
-        filename = netbatch.inputs['fp'][0] + '/' + x + '_species.hdf5'
-        call("rm " + filename)
-        filename = netbatch.inputs['fp'][0] + '/' + x + '_genus.hdf5'
-        call("rm " + filename)
-        filename = netbatch.inputs['fp'][0] + '/' + x + '_family.hdf5'
-        call("rm " + filename)
-        filename = netbatch.inputs['fp'][0] + '/' + x + '_order.hdf5'
-        call("rm " + filename)
-        filename = netbatch.inputs['fp'][0] + '/' + x + '_class.hdf5'
-        call("rm " + filename)
-        filename = netbatch.inputs['fp'][0] + '/' + x + '_phylum.hdf5'
-        call("rm " + filename)
-        call(("rm " + inputs['fp'][0] + '/' + inputs['tools'][0] + '_' + inputs['name'][0] + '_' + inputs['levels'][0] +'.hdf5'))
-        self.assertEqual(len(network), 1)
+                  'address': 'bolt://localhost:7687',
+                  'username': 'neo4j',
+                  'password': 'test',
+                  'quit': False,
+                  'clear': False,
+                  'write': False,
+                  'add': False,
+                  'output': 'network',
+                  'neo4j': (os.path.dirname(massoc.__file__)[:-6] + 'tests\\neo4j')}
+        write_biom_table(testbiom['test'], fmt='hdf5', filepath=(inputs['biom_file'][0]))
+        get_input(inputs)
+        inputs['settings'] = inputs['fp'] + '/settings.json'
+        run_network(inputs)
+        inputs['job'] = 'start'
+        run_neo4j(inputs)
+        inputs['job'] = 'upload'
+        run_neo4j(inputs)
+        inputs['job'] = 'write'
+        run_neo4j(inputs)
+        inputs['job'] = 'clear'
+        run_neo4j(inputs)
+        inputs['job'] = 'quit'
+        run_neo4j(inputs)
+        test = Path(inputs['fp'] + "/network.graphml")
+        self.assertTrue(test.is_file())
+        call(("rm " + inputs['biom_file'][0]))
+        call(("rm " + inputs['fp'] + "/settings.json"))
+        call(("rm " + inputs['fp'] + "/test_family.hdf5"))
+        call(("rm " + inputs['fp'] + "/test_otu.hdf5"))
+        call(("rm " + inputs['fp'] + "/conet_test_family.txt"))
+        call(("rm " + inputs['fp'] + "/spiec-easi_test_family.txt"))
+        call(("rm " + inputs['fp'] + "/network.graphml"))
 
-
-    def test_run_parallel(self):
-        """Checks if the run_parallel function works without raising an error."""
-        inputs = {'biom_file': None,
+    def test_run_netstats(self):
+        """
+        Checks whether combine_data returns
+        a batch object if inputs are supplied.
+        """
+        inputs = {'biom_file': [(testloc[0]+'/data/test.biom')],
                   'cluster': None,
                   'otu_meta': None,
                   'prefix': None,
                   'sample_data': None,
                   'split': None,
-                  'tax_table': [(testloc[0][:-17] + 'otu_tax.txt')],
-                  'fp': [testloc[0]],
-                  'otu_table': [(testloc[0][:-17] + 'otu_otus.txt')],
-                  'tools': ['conet'],
+                  'tax_table': None,
+                  'fp': testloc[0],
+                  'otu_table': None,
+                  'tools': ['spiec-easi', 'conet'],
                   'spiec': None,
-                  'conet': [(os.path.dirname(massoc.__file__)[:-6] + 'tests\\CoNet3')],  # cannot be used in general testing
+                  'spar': None,
+                  'conet': (os.path.dirname(massoc.__file__)[:-6] + 'tests\\CoNet3'),
+                  'conet_bash': None,
                   'spar_pval': None,
                   'spar_boot': None,
                   'levels': ['family'],
-                  'prev': ['20'],
-                  'min': ['10'],
+                  'prev': 20,
+                  'min': None,
+                  'rar': None,
                   'name': ['test'],
                   'cores': None,
-                  'rar': None}
-        batch = Batch(testbiom, inputs)
-        netbatch = Nets(batch)
-        netbatch = run_parallel(netbatch)
-        self.assertEqual(len(netbatch.networks), 1)
-
+                  'address': 'bolt://localhost:7687',
+                  'username': 'neo4j',
+                  'password': 'test',
+                  'quit': False,
+                  'clear': False,
+                  'write': False,
+                  'add': False,
+                  'output': 'network',
+                  'logic': ['union', 'difference', 'intersection'],
+                  'neo4j': (os.path.dirname(massoc.__file__)[:-6] + 'tests\\neo4j')}
+        write_biom_table(testbiom['test'], fmt='hdf5', filepath=(inputs['biom_file'][0]))
+        get_input(inputs)
+        inputs['settings'] = inputs['fp'] + '/settings.json'
+        run_network(inputs)
+        inputs['job'] = 'start'
+        run_neo4j(inputs)
+        inputs['job'] = 'upload'
+        run_neo4j(inputs)
+        run_netstats(inputs)
+        inputs['job'] = 'clear'
+        run_neo4j(inputs)
+        inputs['job'] = 'quit'
+        run_neo4j(inputs)
+        test = Path(inputs['fp'] + "/difference_network.graphml")
+        self.assertTrue(test.is_file())
+        call(("rm " + inputs['biom_file'][0]))
+        call(("rm " + inputs['fp'] + "/settings.json"))
+        call(("rm " + inputs['fp'] + "/test_family.hdf5"))
+        call(("rm " + inputs['fp'] + "/test_otu.hdf5"))
+        call(("rm " + inputs['fp'] + "/conet_test_family.txt"))
+        call(("rm " + inputs['fp'] + "/spiec-easi_test_family.txt"))
+        call(("rm " + inputs['fp'] + "/network.graphml"))
+        call(("rm " + inputs['fp'] + "/difference_network.graphml"))
+        call(("rm " + inputs['fp'] + "/union_network.graphml"))
+        call(("rm " + inputs['fp'] + "/intersection_network.graphml"))
 
 if __name__ == '__main__':
     unittest.main()

@@ -12,7 +12,7 @@ Currently, the following features are available:
 More features are currently under construction.
 
 Welcome to <i>massoc</i>! Contact the author at lisa.rottjers (at) kuleuven.be. Your feedback is much appreciated!
-This is version 0.2.1, and therefore still in early alpha. Encountering bugs is highly likely!
+This is version 0.3.0, and therefore still in early alpha. Encountering bugs is highly likely!
 
 ## Getting Started
 
@@ -106,7 +106,7 @@ Check out the demo at https://github.com/ramellose/massoc/raw/master/massoc/docs
 
 ## Development version and command line
 
-For development purposes, the GUI can be executed from run_massoc.py.
+For development purposes, the GUI can be executed from massocGUI.py.
 The command line interface is currently under development.
 
 massoc runs on Python 3.5. All its dependencies are listed in the requirements.txt file.

@@ -24,18 +24,47 @@ from massoc.GUI.input import InputPanel
 from massoc.GUI.process import ProcessPanel
 from massoc.GUI.network import NetworkPanel
 from massoc.GUI.database import DataPanel
-from massoc.scripts.main import general_settings
+from massoc.GUI.analysis import AnalysisPanel
 import multiprocessing
-import biom
 # source: https://stackoverflow.com/questions/4004353/logging-strategy-for-gui-program
-import logging
-import logging.handlers as handlers
-logger = logging.getLogger()
-hdlr = logging.FileHandler(resource_path("massoc.log"))
-formatter = logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
-hdlr.setFormatter(formatter)
-logger.addHandler(hdlr)
-logger.setLevel(logging.WARNING)
+
+general_settings = {"biom_file": None,
+                     "otu_table": None,
+                     "tax_table": None,
+                     "sample_data": None,
+                     "otu_meta": None,
+                     "cluster": None,
+                     "split": None,
+                     "prev": 20,
+                     "fp": None,
+                     "levels": None,
+                     "tools": None,
+                     "spiec": None,
+                     "conet": None,
+                     "spar": None,
+                     "spar_pval": None,
+                     "spar_boot": None,
+                     "nclust": None,
+                     "name": None,
+                     "cores": None,
+                     "rar": None,
+                     "min": None,
+                     "network": None,
+                     "assoc": None,
+                     "agglom": None,
+                     "logic": None,
+                     "agglom_weight": None,
+                     "export": None,
+                     "neo4j": None,
+                     "procbioms": None,
+                     "address": "bolt://localhost:7687",
+                     "username": "neo4j",
+                     "password": "neo4j",
+                     "variable": None,
+                     "weight": None,
+                     "networks": None,
+                     "output": None,
+                     "add": None}
 
 
 class BuildFrame(wx.Frame):
@@ -53,12 +82,14 @@ class BuildFrame(wx.Frame):
         self.tab3 = ProcessPanel(self.nb)
         self.tab4 = NetworkPanel(self.nb)
         self.tab5 = DataPanel(self.nb)
+        self.tab6 = AnalysisPanel(self.nb)
 
         self.nb.AddPage(self.tab1, "Start")
         self.nb.AddPage(self.tab2, "Input files")
         self.nb.AddPage(self.tab3, "Preprocessing")
         self.nb.AddPage(self.tab4, "Network inference")
         self.nb.AddPage(self.tab5, "Network database")
+        self.nb.AddPage(self.tab6, "Network analysis")
 
         self.settings = general_settings
 
@@ -70,12 +101,25 @@ class BuildFrame(wx.Frame):
         self.CreateStatusBar()
         pub.subscribe(self.change_statusbar, 'change_statusbar')
         self.Show()
-        pub.subscribe(self.format_settings, 'update_settings')
+        pub.subscribe(self.format_settings, 'input_settings')
+        pub.subscribe(self.format_settings, 'process_settings')
+        pub.subscribe(self.format_settings, 'network_settings')
+        pub.subscribe(self.format_settings, 'data_settings')
+        pub.subscribe(self.format_settings, 'analysis_settings')
+        pub.subscribe(self.load_settings, 'load_settings')
 
     def format_settings(self, msg):
         """
         Listener function for settings from tabs in notebook.
         """
+        try:
+            for key in msg:
+                self.settings[key] = msg[key]
+        except:
+            pass
+        pub.sendMessage('show_settings', msg=self.settings)
+
+    def load_settings(self, msg):
         try:
             for key in msg:
                 self.settings[key] = msg[key]

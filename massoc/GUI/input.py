@@ -12,15 +12,39 @@ import wx
 import os
 from wx.lib.pubsub import pub
 import biom
-from biom.cli.metadata_adder import _add_metadata
+from biom.parse import MetadataMap
 from biom.exception import BiomParseException
-import massoc
-from massoc.scripts.main import general_settings
-
+from massoc.run_massoc import get_input
+from massoc.scripts.batch import read_settings, write_settings
+import sys
 import logging
-import logging.handlers as handlers
+import os
+import logging.handlers
+
 logger = logging.getLogger()
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.INFO)
+
+# handler to sys.stdout
+sh = logging.StreamHandler(sys.stdout)
+sh.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+sh.setFormatter(formatter)
+logger.addHandler(sh)
+
+# handler to file
+# only handler with 'w' mode, rest is 'a'
+# once this handler is started, the file writing is cleared
+# other handlers append to the file
+logpath = "\\".join(os.getcwd().split("\\")[:-1]) + '\\massoc.log'
+# filelog path is one folder above massoc
+# pyinstaller creates a temporary folder, so log would be deleted
+fh = logging.handlers.RotatingFileHandler (maxBytes=500,
+                                      filename=logpath, mode='a')
+fh.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+logger.addHandler(fh)
+
 
 class InputPanel(wx.Panel):
     def __init__(self, parent):
@@ -30,10 +54,10 @@ class InputPanel(wx.Panel):
 
         self.frame = parent
 
-        self.settings = general_settings
+        self.settings = dict()
 
         self.currentDirectory = None
-        self.currentDirectory = list(os.getcwd())
+        self.currentDirectory = [os.getcwd()]
         self.count_file = None
         self.tax_file = None
         self.sample_file = None
@@ -168,9 +192,8 @@ class InputPanel(wx.Panel):
     def open_dir(self, event):
         dlg = wx.DirDialog(self, "Choose default directory", style=wx.DD_DEFAULT_STYLE)
         if dlg.ShowModal() == wx.ID_OK:
-            self.currentDirectory = list()
-            self.currentDirectory.append(dlg.GetPath())
-        self.dir_txt.SetValue(self.currentDirectory[0])
+            self.currentDirectory = dlg.GetPath()
+        self.dir_txt.SetValue(self.currentDirectory)
         self.send_settings()
         dlg.Destroy()
 
@@ -180,14 +203,15 @@ class InputPanel(wx.Panel):
         """
         dlg = wx.FileDialog(
             self, message="Select BIOM files",
-            defaultDir=self.currentDirectory[0],
+            defaultDir=self.currentDirectory,
             defaultFile="",
             style=wx.FD_OPEN | wx.FD_MULTIPLE | wx.FD_CHANGE_DIR
         )
         if dlg.ShowModal() == wx.ID_OK:
             paths = dlg.GetPaths()
             paths = [x.replace('\\', '/') for x in paths]
-            self.biom_file = paths
+            if len(paths) > 0:
+                self.biom_file = paths
         self.biom_txt.SetValue("\n".join(self.biom_file))
         self.send_settings()
         self.checkfiles('biom')
@@ -199,14 +223,16 @@ class InputPanel(wx.Panel):
         """
         dlg = wx.FileDialog(
             self, message="Select network edge lists",
-            defaultDir=self.currentDirectory[0],
+            defaultDir=self.currentDirectory,
             defaultFile="",
             style=wx.FD_OPEN | wx.FD_MULTIPLE | wx.FD_CHANGE_DIR
         )
         if dlg.ShowModal() == wx.ID_OK:
             paths = dlg.GetPaths()
             paths = [x.replace('\\', '/') for x in paths]
-            self.network_path = paths
+            if len(paths) > 0:
+                self.network_path = paths
+        # if networks are imported here, biom files should already be set
         self.send_settings()
         self.checkfiles('network')
         dlg.Destroy()
@@ -224,23 +250,71 @@ class InputPanel(wx.Panel):
         """
         Publisher function for settings
         """
-        path = [x.replace('\\', '/') for x in self.currentDirectory]
+        path = self.currentDirectory.replace("\\", "/")
         settings = {'fp': path, 'otu_table': self.count_file, 'tax_table': self.tax_file,
                     'sample_data': self.sample_file, 'biom_file': self.biom_file,
                     'network': self.network_path}
-        pub.sendMessage('update_settings', msg=settings)
+        pub.sendMessage('input_settings', msg=settings)
 
     def clear_settings(self, event):
         """
         Publisher function that clears all current massoc settings
         """
-        self.dir_txt.SetValue("")
-        self.biom_txt.SetValue("")
-        self.count_txt.SetValue("")
-        self.tax_txt.SetValue("")
-        self.meta_txt.SetValue("")
-        self.summ_box.SetValue("")
-        pub.sendMessage('clear_settings', msg='CLEAR')
+        # empty settings dictionary
+        self.settings = {"biom_file": None,
+                         "otu_table": None,
+                         "tax_table": None,
+                         "sample_data": None,
+                         "otu_meta": None,
+                         "cluster": None,
+                         "split": None,
+                         "prev": 20,
+                         "fp": None,
+                         "levels": None,
+                         "tools": None,
+                         "spiec": None,
+                         "conet": None,
+                         "conet_bash": None,
+                         "spar": None,
+                         "spar_pval": None,
+                         "spar_boot": None,
+                         "nclust": None,
+                         "name": None,
+                         "cores": None,
+                         "rar": None,
+                         "min": None,
+                         "network": None,
+                         "assoc": None,
+                         "agglom": None,
+                         "logic": None,
+                         "agglom_weight": None,
+                         "export": None,
+                         "neo4j": None,
+                         "procbioms": None,
+                         "address": "bolt://localhost:7687",
+                         "username": "neo4j",
+                         "password": "neo4j",
+                         "variable": None,
+                         "weight": None,
+                         "networks": None,
+                         "output": None,
+                         "add": None}
+        self.biom_file = None
+        self.biom_txt.SetValue('')
+        self.count_file = None
+        self.count_txt.SetValue('')
+        self.count_txt.SetValue('')
+        self.tax_file = None
+        self.tax_txt.SetValue('')
+        self.sample_file = None
+        self.meta_txt.SetValue('')
+        choice = self.net_choice.GetSelection()
+        self.net_choice.Deselect(choice)
+        self.currentDirectory = None
+        self.dir_txt.SetValue('')
+        self.checks = ''
+        self.summ_box.SetValue(self.checks)
+        pub.sendMessage('load_settings', msg=self.settings)
 
     def load_settings(self, event):
         """
@@ -248,11 +322,8 @@ class InputPanel(wx.Panel):
         and updates the GUI to show these.
         Source: wxpython FileDialog docs
         """
-        self.settings = {'biom_file': None, 'otu_table': None, 'tax_table': None, 'sample_data': None,
-                         'otu_meta': None, 'cluster': None, 'split': None, 'prev': None, 'fp': None,
-                         'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar': None, 'spar_pval': None,
-                         'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None, 'min': None}
-        with wx.FileDialog(self, "Open settings file", wildcard="XYZ files (*.xyz)|*.xyz",
+        self.settings = dict()
+        with wx.FileDialog(self, "Open settings file", wildcard="json files (*.json)|*.json",
                            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
 
             if fileDialog.ShowModal() == wx.ID_CANCEL:
@@ -261,47 +332,32 @@ class InputPanel(wx.Panel):
             # Proceed loading the file chosen by the user
             pathname = fileDialog.GetPath()
             try:
-                file = open(pathname, 'r')
-                for line in file:
-                    vals = line.strip('\n')
-                    vals = vals.split(' ')
-                    if vals[0] in self.settings:
-                        vallist = list()
-                        for i in vals[1:]:
-                            i = i.strip("[]")
-                            i = i.strip(",")
-                            i = i.strip("'")
-                            vallist.append(i)
-                            if i == 'None':
-                                vallist = None
-                        self.settings[vals[0]] = vallist
-
-                file.close()
+                self.settings = read_settings(pathname)
             except IOError:
                 wx.LogError("Cannot open file '%s'." % pathname)
-                logger.error("Cannot open file", exc_info=True)
+                logger.error("Cannot open file. ", exc_info=True)
         self.currentDirectory = self.settings['fp']
-        self.dir_txt.SetValue(self.settings['fp'][0])
+        self.dir_txt.SetValue(self.settings['fp'])
         self.biom_file = self.settings['biom_file']
         self.biom_txt.SetValue('')
+        self.network_path = self.settings['network']
         if self.settings['biom_file'] is not None:
             self.checkfiles('biom')
             self.biom_txt.SetValue('\n'.join(self.settings['biom_file']))
-        self.count_file = self.settings['otu_table']
-        self.count_txt.SetValue('')
         if self.settings['otu_table'] is not None:
+            self.count_file = self.settings['otu_table']
             self.checkfiles('count')
             self.count_txt.SetValue('\n'.join(self.settings['otu_table']))
-        self.tax_file = self.settings['tax_table']
-        self.tax_txt.SetValue('')
         if self.settings['tax_table'] is not None:
             self.checkfiles('tax')
             self.tax_txt.SetValue('\n'.join(self.settings['tax_table']))
-        self.sample_file = self.settings['sample_data']
-        self.meta_txt.SetValue('')
         if self.settings['sample_data'] is not None:
             self.checkfiles('meta')
             self.meta_txt.SetValue('\n'.join(self.settings['sample_data']))
+        if self.settings['network'] is not None:
+            self.net_choice.SetSelection(1)
+        else:
+            self.net_choice.SetSelection(0)
         pub.sendMessage('load_settings', msg=self.settings)
         self.send_settings()
 
@@ -316,7 +372,7 @@ class InputPanel(wx.Panel):
         Takes self.settings file to write to disk.
         Source: wxpython FileDialog docs
         """
-        with wx.FileDialog(self, "Save settings file", wildcard="XYZ files (*.xyz)|*.xyz",
+        with wx.FileDialog(self, "Save settings file", wildcard="json files (*.json)|*.json",
                            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
 
             if fileDialog.ShowModal() == wx.ID_CANCEL:
@@ -325,13 +381,10 @@ class InputPanel(wx.Panel):
             # save the current contents in the file
             pathname = fileDialog.GetPath()
             try:
-                file = open(pathname, 'w')
-                for k, v in self.settings.items():
-                    file.write(str(k) + ' ' + str(v) + '\n')
-                file.close()
+                write_settings(self.settings, pathname)
             except IOError:
                 wx.LogError("Cannot save current data in file '%s'." % pathname)
-                logger.error("Cannot save current data in file", exc_info=True)
+                logger.error("Cannot save current data in file. ", exc_info=True)
 
     def toggle_networks(self, event):
         """Disables network dir button or tab files, depending on selection."""
@@ -361,15 +414,16 @@ class InputPanel(wx.Panel):
         """
         dlg = wx.FileDialog(
             self, message="Select count tables",
-            defaultDir=self.currentDirectory[0],
+            defaultDir=self.currentDirectory,
             defaultFile="",
             style=wx.FD_OPEN | wx.FD_MULTIPLE | wx.FD_CHANGE_DIR
         )
         if dlg.ShowModal() == wx.ID_OK:
             paths = dlg.GetPaths()
-            self.count_file = paths
             paths = [x.replace('\\', '/') for x in paths]
-            self.count_txt.SetValue("\n".join(self.count_file))
+            self.count_file = paths
+            if len(paths) > 0:
+                self.count_txt.SetValue("\n".join(self.count_file))
         self.send_settings()
         self.checkfiles('count')
         dlg.Destroy()
@@ -380,15 +434,16 @@ class InputPanel(wx.Panel):
         """
         dlg = wx.FileDialog(
             self, message="Select taxonomy tables",
-            defaultDir=self.currentDirectory[0],
+            defaultDir=self.currentDirectory,
             defaultFile="",
             style=wx.FD_OPEN | wx.FD_MULTIPLE | wx.FD_CHANGE_DIR
         )
         if dlg.ShowModal() == wx.ID_OK:
             paths = dlg.GetPaths()
-            self.tax_file = paths
             paths = [x.replace('\\', '/') for x in paths]
-            self.tax_txt.SetValue("\n.".join(self.tax_file))
+            self.tax_file = paths
+            if len(paths) > 0:
+                self.tax_txt.SetValue("\n.".join(self.tax_file))
         self.send_settings()
         self.checkfiles('tax')
         dlg.Destroy()
@@ -399,7 +454,7 @@ class InputPanel(wx.Panel):
         """
         dlg = wx.FileDialog(
             self, message="Select metadata",
-            defaultDir=self.currentDirectory[0],
+            defaultDir=self.currentDirectory,
             defaultFile="",
             style=wx.FD_OPEN | wx.FD_MULTIPLE | wx.FD_CHANGE_DIR
         )
@@ -407,7 +462,8 @@ class InputPanel(wx.Panel):
             paths = dlg.GetPaths()
             paths = [x.replace('\\', '/') for x in paths]
             self.sample_file = paths
-            self.meta_txt.SetValue("\n".join(self.sample_file))
+            if len(paths) > 0:
+                self.meta_txt.SetValue("\n".join(self.sample_file))
         self.send_settings()
         self.checkfiles('meta')
         dlg.Destroy()
@@ -424,7 +480,7 @@ class InputPanel(wx.Panel):
                                    " samples. \n\n"
                 except(TypeError, BiomParseException):
                     wx.LogError("Cannot parse biom file '%s'." % x)
-                    logger.error("Cannot parse biom file", exc_info=True)
+                    logger.error("Cannot parse biom file. \n", exc_info=True)
         if filetype is 'biom':
             for x in self.biom_file:
                 try:
@@ -443,29 +499,41 @@ class InputPanel(wx.Panel):
                         pub.sendMessage('receive_metadata', msg=varlist)
                     names = biomtab.metadata(biomtab.ids(axis='observation')[0], axis='observation')
                     if names is not None:
-                        self.checks += "This BIOM file contains taxonomy data."
+                        self.checks += "This BIOM file contains taxonomy data. \n\n"
                         pub.sendMessage('receive_tax', msg='added_tax')
                 except(TypeError, BiomParseException):
                     wx.LogError(str(x) + ' does not appear to be a BIOM-compatible table!')
-                    logger.error(str(x) + ' does not appear to be a BIOM-compatible table!', exc_info=True)
+                    logger.error(str(x) + ' does not appear to be a BIOM-compatible table!. ', exc_info=True)
         if filetype is 'tax':
             for x, z in zip(self.count_file, self.tax_file):
                 try:
                     biomtab = biom.load_table(x)
-                    tax = open(z, 'r')
-                    biomtab = _add_metadata(biomtab, observation_metadata=tax)
+                    obs_f = open(z, 'r')
+                    obs_data = MetadataMap.from_file(obs_f)
+                    obs_f.close()
+                    # for taxonomy collapsing,
+                    # metadata variable needs to be a complete list
+                    # not separate entries for each tax level
+                    for i in list(obs_data):
+                        tax = list()
+                        for j in list(obs_data[i]):
+                            tax.append(obs_data[i][j])
+                            obs_data[i].pop(j, None)
+                        obs_data[i]['taxonomy'] = tax
+                    biomtab.add_metadata(obs_data, axis='observation')
                     self.checks += "Loaded taxonomy table from " + z + ". \n\n"
-                    tax.close()
                     pub.sendMessage('receive_tax', msg='added_tax')
                 except(TypeError, ValueError, BiomParseException):
                     wx.LogError(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!')
-                    logger.error(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!', exc_info=True)
+                    logger.error(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file! ', exc_info=True)
         if filetype is 'meta':
             for x, z in zip(self.count_file, self.sample_file):
                 try:
                     biomtab = biom.load_table(x)
-                    meta = open(z, 'r')
-                    biomtab = _add_metadata(biomtab, sample_metadata=meta)
+                    sample_f = open(z, 'r')
+                    sample_data = MetadataMap.from_file(sample_f)
+                    sample_f.close()
+                    biomtab.add_metadata(sample_data, axis='sample')
                     self.checks += "Loaded sample data from " + z + ". \n\n"
                     data = biomtab.metadata_to_dataframe(axis='sample')
                     allnames = data.columns
@@ -476,17 +544,16 @@ class InputPanel(wx.Panel):
                         varlist.append(name)
                     names = '\n'.join(allnames)
                     self.checks += "The sample data contains the following variables: \n" + names + "\n"
-                    meta.close()
                     pub.sendMessage('receive_metadata', msg=varlist)
-                except(TypeError, ValueError, BiomParseException):
+                except(TypeError, KeyError, ValueError, BiomParseException):
                     wx.LogError(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!')
-                    logger.error(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!', exc_info=True)
+                    logger.error(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file! ', exc_info=True)
         if filetype is 'network':
             try:
-                nets_object = massoc.scripts.main.combine_data(self.settings)
+                nets_object = get_input(self.settings)
                 nets_object.add_networks()
                 self.checks += "Network objects could be added successfully."
             except (TypeError, ValueError):
                 wx.LogError('Unable to load network edge list!')
-                logger.error('Unable to load network edge list!')
+                logger.error('Unable to load network edge list! ')
         self.summ_box.SetValue(self.checks)

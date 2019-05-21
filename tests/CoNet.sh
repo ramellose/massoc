@@ -2,7 +2,7 @@
 export CLASSPATH=$3
 echo ${CLASSPATH}
 
-echo $4
+echo $5
 
 thresh="_threshold"
 thresh=$4$thresh
@@ -19,4 +19,4 @@ java be.ac.vub.bsb.cooccurrence.cmd.CooccurrenceAnalyser --method ensemble --edg
 java be.ac.vub.bsb.cooccurrence.cmd.CooccurrenceAnalyser --method ensemble --edgethreshold 0.05 --verbosity FATAL --iterations 100 --inference mrnet --pvaluemerge brown --resamplemethod bootstrap --stand col_norm --format tab_table --matrixtype count --input $1 --multigraph --randroutine edgeScores --ensemblemethods correl_pearson/correl_spearman/sim_mutInfo/dist_bray/dist_kullbackleibler --max 3 --nantreatment none --nantreatmentparam 1 --networkmergestrategy union --metadataattribs Kingdom/Phylum/Class/Order/Family/Genus/Species --minetmiestimator mi.shrink --minetdisc equalfreq --kernelwidth 0.25 --minsupport 2 --multicorr benjaminihochberg --correlnonrandp none --scoremergestrategy mean --measure1 conf --measure2 supp --min 1 --filter rand/confidence_boot --filterparameter 10.0 --output $2 --ensembleparamfile $thresh
 
 echo "Finished a network!";
-sleep 3
+sleep 20

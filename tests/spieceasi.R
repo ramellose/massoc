@@ -12,9 +12,9 @@
 #' @example spieceasi.R -fp <filepath> -o <filepath>
 #' @export
 
-library(biom)
-library(docopt)
-library(SpiecEasi)
+require(biomformat)
+require(SpiecEasi)
+require(docopt)
 
 doc = 'Usage:
      spieceasi.r [-i input] [-o network]
@@ -28,10 +28,10 @@ opts = docopt(doc)
 
 file = read_biom(opts$i)
 counttab = t(as.matrix(biom_data(file)))
-# change SPIEC-EASI  method: Meinshausen-Buhlmann (mb) or graphical lasso (gl)
+# change SPIEC-EASI  method: Meinshausen-Buhlmann (mb) or graphical lasso (glasso)
 method = "glasso"
 # number of STARS iterations is set with icov.select.params
-spiec.out = spiec.easi(counttab, method, icov.select.params=list(rep.num=30))
+spiec.out = spiec.easi(counttab, method, icov.select.params=list(rep.num=20))
 if (method == "mb"){
   adj = as.matrix(getOptBeta(spiec.out))
 }

@@ -26,7 +26,6 @@ __email__ = 'lisa.rottjers@kuleuven.be'
 __status__ = 'Development'
 __license__ = 'Apache 2.0'
 
-from datetime import datetime
 from biom.cli.util import write_biom_table
 from skbio.stats.composition import multiplicative_replacement, clr, ilr
 from scipy.sparse import csr_matrix, csc_matrix
@@ -37,12 +36,37 @@ from sklearn.cluster import KMeans, DBSCAN, SpectralClustering, AffinityPropagat
 from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
+import json
+import sys
 import os
-import massoc
+from biom import load_table
 import logging
-import logging.handlers as handlers
-logger = logging.getLogger()
-logger.setLevel(logging.WARNING)
+import logging.handlers
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# handler to sys.stdout
+sh = logging.StreamHandler(sys.stdout)
+sh.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+sh.setFormatter(formatter)
+logger.addHandler(sh)
+
+# handler to file
+# only handler with 'w' mode, rest is 'a'
+# once this handler is started, the file writing is cleared
+# other handlers append to the file
+logpath = "\\".join(os.getcwd().split("\\")[:-1]) + '\\massoc.log'
+# filelog path is one folder above massoc
+# pyinstaller creates a temporary folder, so log would be deleted
+fh = logging.handlers.RotatingFileHandler (maxBytes=500,
+                                      filename=logpath, mode='a')
+fh.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+logger.addHandler(fh)
+
 
 class Batch(object):
 
@@ -81,10 +105,8 @@ class Batch(object):
         batch only operates on BIOM OTU tables
     """
 
-    def __init__(self, otu=None, inputs=None):
-        self.log = dict()
-        self.log["Creation"] = datetime.now().strftime('%B %d %Y %H:%M:%S')
-        self.otu = otu
+    def __init__(self, counts=None, inputs=None):
+        self.otu = {}
         self.species = {}
         self.genus = {}
         self.family = {}
@@ -92,6 +114,21 @@ class Batch(object):
         self.class_ = {}
         self.phylum = {}
         self.inputs = inputs
+        if counts is not None:
+            if 'otu' in counts:
+                self.otu = counts['otu']
+            if 'species' in counts:
+                self.species = counts['species']
+            if 'genus' in counts:
+                self.genus = counts['genus']
+            if 'family' in counts:
+                self.family = counts['family']
+            if 'order' in counts:
+                self.order = counts['order']
+            if 'class' in counts:
+                self.class_ = counts['class']
+            if 'phylum' in counts:
+                self.phylum = counts['phylum']
 
     def collapse_tax(self):
         """
@@ -100,54 +137,79 @@ class Batch(object):
         performed simultaneously on genus, order and other taxonomic levels.
         """
         try:
-            for x in list(self.otu):
-                self.species[x + '_species'] = _data_bin(self.otu[x], 7)
-                self.genus[x + '_genus'] = _data_bin(self.otu[x], 6)
-                self.family[x + '_family'] = _data_bin(self.otu[x], 5)
-                self.order[x + '_order'] = _data_bin(self.otu[x], 4)
-                self.class_[x + '_class'] = _data_bin(self.otu[x], 3)
-                self.phylum[x + '_phylum'] = _data_bin(self.otu[x], 2)
-            self.log['collaped_tax'] = "True"
+            if 'species' in self.inputs['levels']:
+                for x in list(self.otu):
+                    self.species[x + '_species'] = _data_bin(self.otu[x], 7, 'species_' + x)
+            if 'genus' in self.inputs['levels']:
+                for x in list(self.otu):
+                    self.genus[x + '_genus'] = _data_bin(self.otu[x], 6, 'genus_' + x)
+            if 'family' in self.inputs['levels']:
+                for x in list(self.otu):
+                    self.family[x + '_family'] = _data_bin(self.otu[x], 5, 'family_' + x)
+            if 'order' in self.inputs['levels']:
+                for x in list(self.otu):
+                    self.order[x + '_order'] = _data_bin(self.otu[x], 4, 'order_' + x)
+            if 'class' in self.inputs['levels']:
+                for x in list(self.otu):
+                    self.class_[x + '_class'] = _data_bin(self.otu[x], 3, 'class_' + x)
+            if 'phylum' in self.inputs['levels']:
+                for x in list(self.otu):
+                    self.phylum[x + '_phylum'] = _data_bin(self.otu[x], 2, 'phylum_' + x)
             self.write_bioms()
         except TypeError:
             logger.error("Could not collapse taxonomy", exc_info=True)
 
-    def summary(self):
-        """
-        This function prints a summary of the settings,
-        as well as performed operations.
-        """
-        for key in self.log:
-            if type(self.log[key]) is str:
-                print(key + ': ' + self.log[key])
-            else:
-                for item in self.log[key]:
-                    print(item + ': ' + self.log[key][item])
 
+    def get_filenames(self):
+        """
+        If the standard processing functions in the Batch object are used,
+        filenames follow a standard format. This function retrieves such filenames
+        so BIOM files can be read without requiring them to be stated explicitly
+        by the user.
+        """
+        try:
+            filenames = dict()
+            for level in self.inputs['levels']:
+                filenames[level] = dict()
+                for x in self.inputs['name']:
+                    if level is 'class':
+                        filenames[level][x] = self.inputs['fp'] + '/' + x + '_' + level + '.hdf5'
+                    else:
+                        filenames[level][x] = self.inputs['fp'] + '/' + x + '_' + level + '.hdf5'
+        except TypeError:
+            logger.error('Unable to generate filenames. \n', exc_info=True)
+        return filenames
 
     def write_bioms(self, fmt='hdf5'):
         """
-        Utility function that writes all BIOM files
+        Utility function that writes BIOM files
         in a Batch object to HDF5 files.
+        OTU files are always written to disk,
+        the rest only if required.
         """
         for x in self.inputs['name']:
-            filename = self.inputs['fp'][0] + '/' + x + '_otu.hdf5'
+            filename = self.inputs['fp'] + '/' + x + '_otu.hdf5'
             try:
                 write_biom_table(self.otu[x], fmt, filename)
             except Exception:
                 logger.error("Cannot write " + str(x) + " to disk", exc_info=True)
-            if len(self.genus) != 0:
-                filename = self.inputs['fp'][0] + '/' + x + '_species.hdf5'
+            if 'species' in self.inputs['levels']:
+                filename = self.inputs['fp'] + '/' + x + '_species.hdf5'
                 write_biom_table(self.species[x + '_species'], fmt, filename)
-                filename = self.inputs['fp'][0] + '/' + x + '_genus.hdf5'
+            if 'genus' in self.inputs['levels']:
+                filename = self.inputs['fp'] + '/' + x + '_genus.hdf5'
                 write_biom_table(self.genus[x + '_genus'], fmt, filename)
-                filename = self.inputs['fp'][0] + '/' + x + '_family.hdf5'
+            if 'family' in self.inputs['levels']:
+                filename = self.inputs['fp'] + '/' + x + '_family.hdf5'
                 write_biom_table(self.family[x + '_family'], fmt, filename)
-                filename = self.inputs['fp'][0] + '/' + x + '_order.hdf5'
+            if 'order' in self.inputs['levels']:
+                filename = self.inputs['fp'] + '/' + x + '_order.hdf5'
                 write_biom_table(self.order[x + '_order'], fmt, filename)
-                filename = self.inputs['fp'][0] + '/' + x + '_class.hdf5'
+            if 'class' in self.inputs['levels']:
+                filename = self.inputs['fp'] + '/' + x + '_class.hdf5'
                 write_biom_table(self.class_[x + '_class'], fmt, filename)
-                filename = self.inputs['fp'][0] + '/' + x + '_phylum.hdf5'
+            if 'phylum' in self.inputs['levels']:
+                filename = self.inputs['fp'] + '/' + x + '_phylum.hdf5'
                 write_biom_table(self.phylum[x + '_phylum'], fmt, filename)
 
     def normalize_transform(self, mode='clr'):
@@ -193,50 +255,50 @@ class Batch(object):
             keep_otus = list()
             binotu = None
             try:
-                if mode is 'prev':  # calculates prevalence
+                if mode == 'prev':  # calculates prevalence
                     fracs = np.count_nonzero(data, axis=1)
                     nsamples = data.shape[1]
                     fracs = fracs / nsamples
                     for y in range(0, len(fracs)):
-                        if fracs[y] >= (float(self.inputs['prev'][0])/100):
+                        if fracs[y] >= (float(self.inputs['prev'])/100):
                             keep_otus.append(self.otu[x]._observation_ids[y])
                         else:
                             binotu = self.otu[x]._observation_ids[y]
                     if binotu is not None and 'Bin' not in keep_otus:
                         keep_otus.append(binotu)
-                    self.log['prevalence_filter'] = self.inputs['prev'][0] + "%"
             except Exception:
                 logger.error("Could not set prevalence filter", exc_info=True)
             try:
-                if mode is 'min':
+                if mode == 'min':
                     mincount = np.sum(data, axis=1)
                     for y in range(0, len(mincount)):
-                        if mincount[y] >= (int(self.inputs['min'][0])):
+                        if mincount[y] >= (int(self.inputs['min'])):
                             keep_otus.append(self.otu[x]._observation_ids[y])
                         else:
                             binotu = self.otu[x]._observation_ids[y]
                     if binotu is not None:
                         keep_otus.append(binotu)
-                    self.log['abundance_filter'] = self.inputs['min'][0] + " counts"
             except Exception:
                 logger.error("Could not set a minimum count filter", exc_info=True)
             keep = self.otu[x].filter(keep_otus, axis="observation", inplace=False)
             try:
                 if binotu is not None:
                     bin = self.otu[x].filter(keep_otus[:-1], axis="observation", inplace=False, invert=True)
-                    data = bin.matrix_data
-                    data = csr_matrix.todense(data)
-                    binsums = np.sum(data, axis=0) # sums all binned OTUs
+                    binsums = np.sum(bin.matrix_data, axis=0) # sums all binned OTUs
+                    # need to recreate keep._data as lil matrix, is more efficient
+                    orig = keep._data.tolil(copy=True)
                     if 'Bin' not in keep_otus:
                         bin_id = keep._obs_index[binotu]
-                        keep._data[bin_id] = binsums
+                        orig[bin_id] = binsums
                         keep._observation_ids[bin_id] = "Bin"
                         keep._obs_index["Bin"] = keep._obs_index.pop(binotu)
                     if 'Bin' in keep_otus:  # necessary to prevent duplicate Bin ID
                         old_bin_id = keep._obs_index["Bin"]
                         old_bin_sums = keep._data[old_bin_id]
                         new_bin_sums = binsums + old_bin_sums
-                        keep._data[old_bin_id] = new_bin_sums
+                        orig[old_bin_id] = new_bin_sums
+                    # update keep._data with orig
+                    keep._data = orig.tocsr()
             except Exception:
                 logger.error("Could not preserve binned taxa", exc_info=True)
             self.otu[x] = keep
@@ -254,10 +316,10 @@ class Batch(object):
         batchcopy = deepcopy(self)
         for x in list(self.otu):
             try:
-                if self.inputs['rar'][0] == 'True':
+                if self.inputs['rar'] == 'True':
                     lowest_count = int(min(self.otu[x].sum(axis='sample')))
                 else:
-                    lowest_count = int(self.inputs['rar'][0])
+                    lowest_count = int(self.inputs['rar'])
                 data = self.otu[x].matrix_data
                 data = csr_matrix.todense(data)
                 keep_samples = list()
@@ -267,7 +329,6 @@ class Batch(object):
                         keep_samples.append(self.otu[x]._sample_ids[y])
                 keep = self.otu[x].filter(keep_samples, axis="sample", inplace=False)
                 batchcopy.otu[x] = keep.subsample(n=lowest_count, axis='sample')
-                self.log['rarefaction'] = str(lowest_count) + " counts"
             except Exception:
                 logger.error("Unable to rarefy file", exc_info=True)
             for x in list(self.otu):
@@ -281,24 +342,25 @@ class Batch(object):
         include the split- and non-split files.
         """
         inputs = self.inputs
-        part_f = lambda id_, md: md[inputs['split'][0]]
+        part_f = lambda id_, md: md[inputs['split']]
         new_dict = deepcopy(self.otu)
         if type(self.otu) is not dict:
+            logger.warning('Split_biom requires a dictionary of biom files to be supplied. \n', exc_info=True)
             raise ValueError("Split_biom requires a dictionary of biom files to be supplied.")
         for x in list(self.otu):
             try:
                 biomtab = new_dict[x]
-                if inputs['split'][0] not in biomtab._sample_metadata[1]:
-                    if inputs['split'][0] is not 'TRUE':
+                if inputs['split'] not in biomtab._sample_metadata[1]:
+                    if inputs['split'] is not 'TRUE':
                         raise ValueError("Sample metadata does not contain this header!")
                 new_tables = biomtab.partition(part_f, axis='sample')
                 for new in new_tables:
                     key = x + '_' + new[0]
                     new_dict[key] = new[1]
+                    self.inputs['name'].append(key)
             except Exception:
                 logger.error("Failed to split files", exc_info=True)
         self.otu = new_dict
-        self.log['split_variables'] = inputs['split'][0]
 
     def cluster_biom(self):
         """First normalizes bioms so clustering is not affected,
@@ -314,11 +376,12 @@ class Batch(object):
         """
         inputs = self.inputs
         if inputs['nclust'] is not None:
-            nums = list(range(2, (int(inputs['nclust'][0]) + 1)))
+            nums = list(range(2, (int(inputs['nclust']) + 1)))
         else:
             nums = list(range(2,5))
         new_dict = {}
         if type(self.otu) is not dict:
+            logger.warning('Cluster_biom requires a dictionary of biom files to be supplied. \n', exc_info=True)
             raise ValueError("Cluster_biom requires a dictionary of biom files to be supplied.")
         normbatch = self.normalize_transform(mode='clr')
         # CLR transform places data in Euclidean space
@@ -334,7 +397,7 @@ class Batch(object):
                 randomclust = np.random.randint(2, size=len(data))
                 sh_score = [silhouette_score(data, randomclust)]
                 # K-means clustering, tests 2-4 clusters
-                if inputs['cluster'][0] == 'K-means':
+                if inputs['cluster'] == 'K-means':
                     for i in nums:
                         clusters = KMeans(i).fit_predict(data)
                         silhouette_avg = silhouette_score(data, clusters)
@@ -342,11 +405,11 @@ class Batch(object):
                     topscore = int(np.argmax(sh_score) + 1)
                     bestcluster = KMeans(topscore).fit_predict(data)
                 # DBSCAN clustering, automatically finds optimal cluster size
-                if inputs['cluster'][0] == 'DBSCAN':
+                if inputs['cluster'] == 'DBSCAN':
                     bestcluster = DBSCAN().fit_predict(data)
                     topscore = len(set(bestcluster)) - (1 if -1 in bestcluster else 0)
                 # Gaussian Mixture Model (gmm) probability distribution
-                if inputs['cluster'][0] == 'Gaussian':
+                if inputs['cluster'] == 'Gaussian':
                     for i in nums:
                         fit = GaussianMixture(i).fit(data)
                         clusters = fit.predict(data)
@@ -356,7 +419,7 @@ class Batch(object):
                     bestfit = GaussianMixture(topscore).fit(data)
                     bestcluster = bestfit.predict(data)
                 # Spectral Clustering
-                if inputs['cluster'][0] == 'Spectral':
+                if inputs['cluster'] == 'Spectral':
                     for i in nums:
                         clusters = SpectralClustering(i).fit_predict(data)
                         silhouette_avg = silhouette_score(data, clusters)
@@ -374,18 +437,17 @@ class Batch(object):
                 for i in range(topscore):
                     mask, = np.where(bestcluster == i)
                     for j in mask:
-                        new_dict[x]._sample_metadata[j]['cluster'] = inputs['cluster'][0] + '_' + str(i)
+                        new_dict[x]._sample_metadata[j]['cluster'] = inputs['cluster'] + '_' + str(i)
                 self.otu = new_dict
-                self.log['cluster'] = str(topscore) + " clusters with " + inputs['cluster'][0]
                 if inputs['split'] is not None:
-                    if inputs['split'][0] == 'TRUE':
-                        inputs['split'][0] = 'cluster'
+                    if inputs['split'] == 'TRUE':
+                        inputs['split'] = 'cluster'
                         self.split_biom()
             except Exception:
                 logger.error("Error occurred when clustering samples", exc_info=True)
 
 
-def _data_bin(biomfile, taxnum):
+def _data_bin(biomfile, taxnum, key):
     """While the BIOM file collapse function collapses counts, it stores taxonomy in a manner
     that is not compatible with the OTU taxonomy; taxonomy is stored as observation ID and not as
     observation metadata.
@@ -407,7 +469,48 @@ def _data_bin(biomfile, taxnum):
         id = obs_ids[number]
         num_id = collapsed._obs_index[id]
         old_ids = agglom_ids[num_id]
-        new_obs_ids[number] = "agglom-" + str(number)
+        new_obs_ids[number] = key + "-agglom-" + str(number)
     collapsed._observation_ids = new_obs_ids
     return collapsed
 
+
+def write_settings(settings, path=None):
+    """
+    Writes a dictionary of settings to a json file.
+    :param settings: Filepath to settings file.
+    :return:
+    """
+    if not path:
+        path = settings['fp'] + '/settings.json'
+    # as requested in comment
+    with open(path, 'w') as file:
+        file.write(json.dumps(settings))
+    file.close()
+    logger.info("Wrote settings to: " + path)
+
+
+def read_settings(path):
+    """
+    Writes a dictionary of settings to a json file.
+    :param path: Filepath to settings file.
+    :return: Dictionary of settings
+    """
+    # as requested in comment
+    with open(path, 'r') as file:
+        settings = json.load(file)
+    file.close()
+    return settings
+
+
+def read_bioms(counts):
+    """
+    Given a dictionary of filenames per taxonomic level,
+    this function generates a dictionary of biom files.
+    :param counts: Dictionary of filenames leading to BIOM files
+    :return: Dictionary of BIOM files
+    """
+    bioms = deepcopy(counts)
+    for level in counts:
+        for filename in counts[level]:
+            bioms[level][filename] = load_table(counts[level][filename])
+    return bioms

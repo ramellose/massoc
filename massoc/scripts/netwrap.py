@@ -41,21 +41,45 @@ __license__ = 'Apache 2.0'
 
 import ast
 import csv
-import os
 import statistics
-from datetime import datetime
-from subprocess import call
 import massoc
 import biom
-import networkx
+import networkx as nx
 import pandas
+import sys
 from copy import deepcopy
 from massoc.scripts.batch import Batch
-from massoc.scripts.main import resource_path
 import logging
-import logging.handlers as handlers
-logger = logging.getLogger()
-logger.setLevel(logging.WARNING)
+import multiprocessing as mp
+from functools import partial
+from subprocess import call
+import os
+import logging.handlers
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# handler to sys.stdout
+sh = logging.StreamHandler(sys.stdout)
+sh.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+sh.setFormatter(formatter)
+logger.addHandler(sh)
+
+# handler to file
+# only handler with 'w' mode, rest is 'a'
+# once this handler is started, the file writing is cleared
+# other handlers append to the file
+logpath = "\\".join(os.getcwd().split("\\")[:-1]) + '\\massoc.log'
+# filelog path is one folder above massoc
+# pyinstaller creates a temporary folder, so log would be deleted
+fh = logging.handlers.RotatingFileHandler (maxBytes=500,
+                                      filename=logpath, mode='a')
+fh.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+logger.addHandler(fh)
+
 
 class Nets(Batch):
 
@@ -81,8 +105,7 @@ class Nets(Batch):
         Dictionary of class-agglomerated biom files
     phylum : dict, optional
         Dictionary of phylum-agglomerated biom files
-    log : str
-        Logs operations used on batch object
+
     networks: dict
         Dictionary of network files
 
@@ -90,7 +113,7 @@ class Nets(Batch):
 
     def __init__(self, batch=None):
         super(Nets, self).__init__()
-        if batch is not None:
+        if batch:
             self.otu = batch.otu
             self.species = batch.species
             self.genus = batch.genus
@@ -99,10 +122,8 @@ class Nets(Batch):
             self.class_ = batch.class_
             self.phylum = batch.phylum
             self.inputs = batch.inputs
-            self.log = batch.log
         else:
             otu = dict()
-            self.log["Creation"] = "Creation: " + datetime.now().strftime('%B %d %Y %H:%M:%S') + "\n"
             for value in self.inputs['biom']:
                 otutab = biom.load_table(value)
                 otu[value] = otutab
@@ -110,27 +131,9 @@ class Nets(Batch):
         self.networks = dict()
         self.names = list(self.otu)
         if type(self.otu) is not dict:
+            logger.error("Please supply a dictionary of biom files. ", exc_info=True)
             raise ValueError("Please supply a dictionary of biom files.")
 
-
-    def get_filenames(self):
-        """
-        If the standard processing functions in the Batch object are used,
-        filenames follow a standard format. This function retrieves such filenames
-        so BIOM files can be read without requiring them to be stated explicitly
-        by the user.
-        """
-        try:
-            filenames = {}
-            for x in self.names:
-                for level in self.inputs['levels']:
-                    if level is 'class':
-                        filenames[(x + '_') + level + '_'] = self.inputs['fp'][0] + '/' + x + '_' + level + '.hdf5'
-                    else:
-                        filenames[(x + '_') + level] = self.inputs['fp'][0] + '/' + x + '_' + level + '.hdf5'
-        except TypeError:
-            logger.error("Unable to generate filenames", exc_info=True)
-        return filenames
 
     def write_networks(self):
         """
@@ -138,36 +141,37 @@ class Nets(Batch):
         """
         try:
             for network in self.networks:
-                path = self.inputs['fp'][0] + '/' + network + '.txt'
-                networkx.write_weighted_edgelist(G=self.networks[network], path=path)
+                path = self.inputs['fp'] + '/' + network + '.txt'
+                nx.write_weighted_edgelist(G=self.networks[network], path=path)
         except Exception:
-            logger.error("Unable to write networks to XML files", exc_info=True)
+            logger.error("Unable to write networks to disk. ", exc_info=True)
 
-    def add_networks(self):
+    def add_networks(self, filename):
         """
         In case users want to manually import a network,
         this function adds the network file to the Nets object and checks
         whether the identifiers specified in the file match those in included BIOM files.
         Currently, only edge lists are supported.
         """
-        filename = self.inputs['network']['filename']
-        filetype = self.inputs['network']['filetype']
-        if filetype == 'weighted':
-            network = networkx.read_weighted_edgelist(filename)
-        if filetype == 'unweighted':
-            network = networkx.read_edgelist(filename)
+        network = nx.read_weighted_edgelist(filename)
         try:
             network_nodes = list(network.nodes)
         except TypeError:
-            logger.error("Unable to read edge list.")
+            logger.error("Unable to read edge list. ", exc_info=True)
         taxon_ids = list()
-        for biomfile in self.otu:
-            taxon_ids.extend(list(self.otu[biomfile].ids(axis='observation')))
+        biomfiles = [self.otu, self.species, self.genus,
+                     self.family, self.order, self.class_, self.phylum]
+        biomlist = list()
+        for subset in biomfiles:
+            for file in subset:
+                biomlist.append(subset[file])
+        for biomfile in biomlist:
+            taxon_ids.extend(list(biomfile.ids(axis='observation')))
         missing_node = any(x not in taxon_ids for x in network_nodes)
         if missing_node:
-            logger.error("Imported network node not found in taxon identifiers.")
+            logger.error("Imported network node not found in taxon identifiers. ", exc_info=True)
         else:
-            self.network[filename] = network
+            self.networks[filename] = network
 
     def _prepare_conet(self):
         """Carries out initial work before actually running CoNet.
@@ -176,23 +180,26 @@ class Nets(Batch):
         However, the bash calls can be pickled; therefore, initial data prep
         is done first, then the CoNet calls are in parallel. """
         filenames = self.get_filenames()
-        ids = dict.fromkeys(filenames)
-        obs_ids = dict.fromkeys(filenames)
+        ids = dict()
+        obs_ids = dict()
         for x in filenames:
-            tempname = filenames[x][:-5] + '_counts_conet.txt'
-            file = biom.load_table(filenames[x])
-            # code below is necessary to fix an issue where CoNet cannot read numerical OTU ids
-            orig_ids = dict()
-            for i in range(len(file.ids(axis='observation'))):
-                id = file.ids(axis='observation')[i]
-                orig_ids[("otu-" + str(i))] = id
-                file.ids(axis='observation')[i] = "otu_" + str(i)
-            otu = file.to_tsv()
-            text_file = open(tempname, 'w')
-            text_file.write(otu[34:])
-            text_file.close()
-            ids[x] = orig_ids
-            obs_ids[x] = file._observation_ids
+            ids[x] = dict()
+            obs_ids[x] = dict()
+            for y in filenames[x]:
+                tempname = filenames[x][y][:-5] + '_counts_conet.txt'
+                file = biom.load_table(filenames[x][y])
+                obs_ids[x][y] = deepcopy(file._observation_ids)
+                # code below is necessary to fix an issue where CoNet cannot read numerical OTU ids
+                orig_ids = dict()
+                for i in range(len(file.ids(axis='observation'))):
+                    id = file.ids(axis='observation')[i]
+                    orig_ids[("otu-" + str(i))] = id
+                    file.ids(axis='observation')[i] = "otu_" + str(i)
+                otu = file.to_tsv()
+                text_file = open(tempname, 'w')
+                text_file.write(otu[34:])
+                text_file.close()
+                ids[x][y] = orig_ids
         return ids, obs_ids
 
     def _prepare_spar(self):
@@ -203,12 +210,13 @@ class Nets(Batch):
         is done first, then the SparCC calls are in parallel. """
         filenames = self.get_filenames()
         for x in filenames:
-            file = biom.load_table(filenames[x])
-            otu = file.to_tsv()
-            tempname = filenames[x][:-5] + '_otus_sparcc.txt'
-            text_file = open(tempname, 'w')
-            text_file.write(otu[29:])
-            text_file.close()
+            for y in filenames[x]:
+                file = biom.load_table(filenames[x][y])
+                otu = file.to_tsv()
+                tempname = filenames[x][y][:-5] + '_otus_sparcc.txt'
+                text_file = open(tempname, 'w')
+                text_file.write(otu[29:])
+                text_file.close()
 
 def _add_tax(network, file):
     """
@@ -231,29 +239,36 @@ def _add_tax(network, file):
             tax = tax.rename(index=str, columns=taxdict)
             for column in tax.columns:
                 taxdict = tax[column].to_dict()
-                networkx.set_node_attributes(network, values=taxdict, name=column)
+                nx.set_node_attributes(network, values=taxdict, name=column)
     except Exception:
-        logger.error("Unable to collect taxonomy for agglomerated files", exc_info=True)
+        logger.error("Unable to collect taxonomy for agglomerated files. ", exc_info=True)
     return network
 
 
-def run_conet(filenames, conet, orig_ids, obs_ids):
+def run_conet(filenames, conet, orig_ids, obs_ids, settings=None):
     """
     Runs a Bash script containing the CoNet Bash commands.
     Unfortunately, errors produced by CoNet cannot be caught,
     because the exit status of the script is 0 regardless
     of CoNet producing a network or not.
-    conet = nets.inputs['conet'][0
+    conet = nets.inputs['conet']
     """
-    path = resource_path('CoNet.sh')
+    if settings:
+        path = settings
+        if path[-3:] != '.sh':
+            logger.error("Please supply a .sh executable to run CoNet. ", exc_info=True)
+            raise ValueError("Please supply a .sh executable to run CoNet.")
+
+    else:
+        path = resource_path('CoNet.sh')
     path = path.replace('\\', '/')
     libpath = conet + '\\lib\\CoNet.jar'
     libpath = libpath.replace('\\', '/')
     results = dict()
     for x in filenames:
-        try:
-            graphname = filenames[x][:-5] + '_conet.tsv'
-            tempname = filenames[x][:-5] + '_counts_conet.txt'
+        for y in filenames[x]:
+            graphname = filenames[x][y][:-5] + '_conet.tsv'
+            tempname = filenames[x][y][:-5] + '_counts_conet.txt'
             # Code below removed because taxonomic information is not necessary
             # tax = file._observation_metadata
             # for species in tax:
@@ -273,42 +288,44 @@ def run_conet(filenames, conet, orig_ids, obs_ids):
             #f.write(lines)
             #f.close()
             # solving issue where guessingparam is higher than maximum edge number
-            n_otus = len(orig_ids[x])
+            n_otus = len(orig_ids[x][y])
             guessingparam = str(n_otus * n_otus -1)
             if int(guessingparam) > 1000:
                 guessingparam = str(1000)
             cmd = path + ' ' + tempname + ' ' + ' ' + graphname + ' ' + libpath + \
-                  ' ' + filenames[x][:-5] + ' ' + guessingparam
-            print(cmd)
+                  ' ' + resource_path("") + str(x) + '_' + str(y) + ' ' + guessingparam
             call(cmd, shell=True)
-            call("rm " + tempname + " " + " " + filenames[x][:-5] + "_threshold" + " " +
-                filenames[x][:-5] + "_permnet", shell=True)
-            print(graphname)
-            with open(graphname, 'r') as fin:
-                data = fin.read().splitlines(True)
-                fin.close()
-            with open(graphname, 'w') as fout:
-                fout.writelines(data[2:])
-                fout.close()
-            signs = [x[0] for x in csv.reader(open(graphname, 'r'), delimiter='\t')]
+            call("rm " + tempname, shell=True)
+            call("rm " + resource_path("") + str(x) + '_' + str(y) + "_threshold", shell=True)
+            call("rm " + resource_path("") + str(x) + '_' + str(y) + "_permnet", shell=True)
+            try:
+                with open(graphname, 'r') as fin:
+                    data = fin.read().splitlines(True)
+                    fin.close()
+                with open(graphname, 'w') as fout:
+                    fout.writelines(data[2:])
+                    fout.close()
+            except FileNotFoundError:
+                logger.error("Warning: CoNet did not complete network inference on: " + str(x) + "_" + str(y) + ' ', exc_info=True)
+            signs = [b[0] for b in csv.reader(open(graphname, 'r'), delimiter='\t')]
             signs = [word.replace('mutualExclusion', '-1') for word in signs]
             signs = [word.replace('copresence', '1') for word in signs]
             signs = [word.replace('unknown', 'None') for word in signs]
-            signs = [ast.literal_eval(x) for x in signs]
+            signs = [ast.literal_eval(b) for b in signs]
             clean_signs = list()  # None values need to be removed to make sure median is not 0.5.
             for sublist in signs:
                 cleaned = [elem for elem in sublist if elem is not None]
                 clean_signs.append(cleaned)
             signs = [statistics.median(x) for x in clean_signs]
             # methods = [x[2] for x in csv.reader(open(graphname, 'r'), delimiter='\t')]
-            names = [x[15] for x in csv.reader(open(graphname, 'r'), delimiter='\t')]
-            names = [x.split('->') for x in names]
+            names = [b[15] for b in csv.reader(open(graphname, 'r'), delimiter='\t')]
+            names = [b.split('->') for b in names]
             new_names = list()
             for item in names:
-                new_item = [x.replace(x, orig_ids[x]) for x in item]
+                new_item = [y.replace(y, orig_ids[x][y][b]) for b in item]
                 new_names.append(new_item)
             i = 0
-            adj = pandas.DataFrame(index=obs_ids[x], columns=obs_ids[x])
+            adj = pandas.DataFrame(index=obs_ids[x][y], columns=obs_ids[x][y])
             adj = adj.fillna(0)
             for name in new_names:
                 id1 = adj.columns.get_loc(name[0])
@@ -317,12 +334,10 @@ def run_conet(filenames, conet, orig_ids, obs_ids):
                 i = i+1
                 adj.iloc[id1, id2] = sign
                 adj.iloc[id2, id1] = sign
-            net = networkx.from_pandas_adjacency(adj)
-            net = _add_tax(net, filenames[x])
-            results[("conet_" + x)] = net
-            call ("rm " + graphname, shell=True)
-        except Exception:
-            logger.error("Unable to finish CoNet on " + str(x), exc_info=True)
+            net = nx.from_pandas_adjacency(adj)
+            net = _add_tax(net, filenames[x][y])
+            results[("conet_" + x + "_" + y)] = net
+            call("rm " + graphname, shell=True)
     return results
 
 def run_spiec(filenames, settings=None):
@@ -330,28 +345,31 @@ def run_spiec(filenames, settings=None):
     Runs a R executable containing settings for SPIEC-EASI network inference.
     """
     results = dict()
-    if settings is None:
-        path = resource_path('spieceasi.r')
-        path = path.replace('\\', '/')
-    else:
-        path = settings[0]
+    if settings:
+        path = settings
         if path[-2:] != '.R':
+            logger.error("Please supply an R executable to run SPIEC-EASI. ", exc_info=True)
             raise ValueError("Please supply an R executable to run SPIEC-EASI.")
+    else:
+        path = resource_path('spieceasi.r')
+    path = path.replace('\\', '/')
     for x in filenames:
-        try:
-            graphname = filenames[x][:-5] + '_spiec'
-            cmd = "Rscript " + path + " -i " + filenames[x] + " -o " + graphname
+        for y in filenames[x]:
+            graphname = filenames[x][y][:-5] + '_spiec'
+            cmd = "Rscript " + path + " -i " + filenames[x][y] + " -o " + graphname
             call(cmd, shell=True)
-            corrtab = pandas.read_csv(graphname, sep='\t', index_col=0)
+            try:
+                corrtab = pandas.read_csv(graphname, sep='\t', index_col=0)
+            except FileNotFoundError:
+                logger.error("Warning: SPIEC-EASI did not complete network inference. " + str(x) + "_" + str(y) + ' ', exc_info=True)
+                exit(1)
             corrtab.columns = corrtab.index
             corrtab[corrtab > 0] = 1
             corrtab[corrtab < 0] = -1
-            net = networkx.from_pandas_adjacency(corrtab)
-            net = _add_tax(net, filenames[x])
-            results[("spiec-easi_" +x)] = net
+            net = nx.from_pandas_adjacency(corrtab)
+            net = _add_tax(net, filenames[x][y])
+            results[("spiec-easi_" + x + "_" + y)] = net
             call("rm " + graphname, shell=True)
-        except Exception:
-            logger.error("Unable to finish SPIEC-EASI on " + str(x), exc_info=True)
     return results
 
 def run_spar(filenames, spar, boots=100, pval_threshold=0.001):
@@ -366,12 +384,12 @@ def run_spar(filenames, spar, boots=100, pval_threshold=0.001):
     path = [x.replace('\\', '/') for x in path]
     results = dict()
     for x in filenames:
-        try:
-            tempname = filenames[x][:-5] + '_otus_sparcc.txt'
-            corrs = filenames[x][:-5] + '_spar_corrs.tsv'
-            cov = filenames[x][:-5] + '_spar_cov.tsv'
-            pvals = filenames[x][:-5] + '_spar_pvals.tsv'
-            bootstraps = filenames[x][:-(5 + len(x))] + 'bootstraps'
+        for y in filenames[x]:
+            tempname = filenames[x][y][:-5] + '_otus_sparcc.txt'
+            corrs = filenames[x][y][:-5] + '_spar_corrs.tsv'
+            cov = filenames[x][y][:-5] + '_spar_cov.tsv'
+            pvals = filenames[x][y][:-5] + '_spar_pvals.tsv'
+            bootstraps = filenames[x][y][:-(5 + len(x))] + 'bootstraps'
             cmd = "python2 " + path[0] + " " + tempname + " -i 5 " +\
                   " --cor_file " + corrs + " --cov_file " + cov
             call(cmd, shell=True)
@@ -392,7 +410,11 @@ def run_spar(filenames, spar, boots=100, pval_threshold=0.001):
             call("rm -rf " + bootstraps, shell=True)
             call("rm " + tempname, shell=True)
             call("rm " + cov, shell=True)
-            corrtab = pandas.read_csv(corrs, sep='\t', index_col=0)
+            try:
+                corrtab = pandas.read_csv(corrs, sep='\t', index_col=0)
+            except FileNotFoundError:
+                logger.error("Warning: SparCC did not complete network inference. " + str(x) + "_" + str(y) + ' ', exc_info=True)
+                exit(1)
             corrtab.columns = corrtab.index
             pvaltab = pandas.read_csv(pvals, sep='\t', index_col=0)
             pvaltab = pvaltab < pval_threshold  # p value threshold for SparCC pseudo p-values
@@ -400,13 +422,117 @@ def run_spar(filenames, spar, boots=100, pval_threshold=0.001):
             corrtab = corrtab.fillna(0)
             corrtab[corrtab > 0] = 1
             corrtab[corrtab < 0] = -1
-            net = networkx.from_pandas_adjacency(corrtab)
-            net = _add_tax(net, filenames[x])
-            results[("sparcc_" + x)] = net
+            net = nx.from_pandas_adjacency(corrtab)
+            net = _add_tax(net, filenames[x][y])
+            results[("sparcc_" + x + "_" + y)] = net
             call("rm " + corrs + " " + pvals +
                  " " + os.path.dirname(massoc.__file__)[:-6] +
                  "\cov_mat_SparCC.out", shell=True)
-        except Exception:
-            logger.error("Unable to finish SparCC on " + str(x), exc_info=True)
     return results
+
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller.
+     Source: https://stackoverflow.com/questions/7674790/bundling-data-files-with-pyinstaller-onefile"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
+def run_jobs(job, spar, conet, orig_ids, obs_ids, filenames,
+             spiec_settings=None, conet_settings=None):
+    """
+    Accepts a job from a joblist to run network inference in parallel.
+    """
+    select_filenames = {job[list(job.keys())[0]]: filenames[job[list(job.keys())[0]]]}
+    # only filenames with the same taxonomic level are included
+    if 'spiec-easi' in job:
+        logger.info('Running SPIEC-EASI... ')
+        networks = run_spiec(select_filenames, settings=spiec_settings)
+    if 'sparcc' in job:
+        logger.info('Running SparCC... ')
+        if 'spar_setting' in job['sparcc']:
+            if len(job['spar_setting'][1]) == 2:
+                networks = run_spar(spar=spar, filenames=select_filenames,
+                                    boots=job['spar_setting'][1]['spar_boot'],
+                                    pval_threshold=job['spar_setting'][1]['spar_pval'])
+            else:
+                if 'spar_boot' in job['spar_setting'][1]:
+                    networks = run_spar(spar=spar, filenames=select_filenames,
+                                        boots=job['spar_setting'][1]['spar_boot'])
+                if 'spar_pval' in job['spar_setting'][1]:
+                    networks = run_spar(spar=spar, filenames=select_filenames,
+                                        pval_threshold=job['spar_setting'][1]['spar_pval'])
+        else:
+            networks = run_spar(spar=spar, filenames=select_filenames)
+    if 'conet' in job:
+        logger.info('Running CoNet... ')
+        networks = run_conet(conet=conet, filenames=select_filenames,
+                             orig_ids=orig_ids, obs_ids=obs_ids, settings=conet_settings)
+    return networks
+
+
+def get_joblist(nets):
+    """
+    Creates a list of jobs that can be distributed over multiple processes.
+    Note: should be appended to handle multiple taxonomic levels + files!
+    Each job is a dictionary: the key represents a tool, while the
+    value represents taxonomic level and file location.
+    """
+    joblist = list()
+    for level in nets.inputs['levels']:
+        sublist = dict()
+        if nets.inputs['tools']:
+            for i in nets.inputs['tools']:
+                sublist[i] = level
+        if nets.inputs['spiec'] is not None:
+            sublist['spiec_setting'] = [level, nets.inputs['spiec']]
+        if nets.inputs['spar_boot'] or nets.inputs['spar_pval'] is not None:
+            sublist['spar_setting'] = [level, {'spar_boot': nets.inputs['spar_boot'],
+            'spar_pval': nets.inputs['spar_pval']}]
+        for value in sublist:
+            joblist.append({value: sublist[value]})
+    return joblist
+
+
+def run_parallel(nets):
+    """Creates partial function to run as pool."""
+    cores = nets.inputs['cores']
+    jobs = get_joblist(nets)
+    filenames = nets.inputs['procbioms']
+    logger.info('Collecting jobs... ')
+    pool = mp.Pool(cores)
+    # multiprocess supports passing objects
+    # multiprocessing does not
+    # however, multiprocess cannot be frozen
+    # need to rewrite netwrap as pickle-able objects!
+    orig_ids = None
+    obs_ids = None
+    if 'conet' in nets.inputs['tools']:
+        orig_ids, obs_ids = nets._prepare_conet()
+    if 'sparcc' in nets.inputs['tools']:
+        nets._prepare_spar()
+    func = partial(run_jobs, filenames=filenames, orig_ids=orig_ids,
+                   obs_ids=obs_ids, spar=nets.inputs['spar'], conet=nets.inputs['conet'],
+                   spiec_settings=nets.inputs['spiec'], conet_settings=nets.inputs['conet_bash'])
+    try:
+        logger.info('Distributing jobs... ')
+        # network_list = list()
+        # for job in jobs:
+            # result = run_jobs(nets, job)
+            # network_list.append(result)
+        results = pool.map(func, iter(jobs))
+    except Exception:
+        logger.error('Failed to generate workers. ', exc_info=True)
+    for item in results:
+        for network in item:
+            nets.networks[network] = item[network]
+    # for i in range(1, len(jobs)):
+    #    nets.networks = {**nets.networks, **results[i]}
+    # clean up old written BIOM files
+    logger.info('Completed tasks! ')
+    return nets
 

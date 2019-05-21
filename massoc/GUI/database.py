@@ -1,6 +1,5 @@
 """
-The network panel allows users to select network inference tools to run and to adjust the settings of these tools.
-It also provides an overview of current settings, and can execute massoc with these settings.
+The database panel allows users to start up a previously configured Neo4j database.
 """
 
 __author__ = 'Lisa Rottjers'
@@ -11,27 +10,43 @@ __license__ = 'Apache 2.0'
 from threading import Thread
 import wx
 from wx.lib.pubsub import pub
-from massoc.scripts.main import general_settings
-from massoc.scripts.netbase import ImportDriver
-from massoc.scripts.netstats import Driver
+from run_massoc import run_neo4j
 import webbrowser
 from biom import load_table
 import networkx as nx
-from networkx import NetworkXError
-from subprocess import Popen
-from massoc.scripts.main import resource_path
-from psutil import Process
+from copy import deepcopy
+from psutil import Process, pid_exists
 from time import sleep
-from platform import system
 import logging
 import sys
-import logging.handlers as handlers
+import os
+import logging.handlers
+from massoc.scripts.batch import read_settings
+
 logger = logging.getLogger()
-hdlr = logging.FileHandler(resource_path("massoc.log"))
-formatter = logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
-hdlr.setFormatter(formatter)
-logger.addHandler(hdlr)
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.INFO)
+
+# handler to sys.stdout
+sh = logging.StreamHandler(sys.stdout)
+sh.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+sh.setFormatter(formatter)
+logger.addHandler(sh)
+
+# handler to file
+# only handler with 'w' mode, rest is 'a'
+# once this handler is started, the file writing is cleared
+# other handlers append to the file
+logpath = "\\".join(os.getcwd().split("\\")[:-1]) + '\\massoc.log'
+# filelog path is one folder above massoc
+# pyinstaller creates a temporary folder, so log would be deleted
+fh = logging.handlers.RotatingFileHandler (maxBytes=500,
+                                      filename=logpath, mode='a')
+fh.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+logger.addHandler(fh)
+
 
 class DataPanel(wx.Panel):
     def __init__(self, parent):
@@ -42,26 +57,27 @@ class DataPanel(wx.Panel):
         btnsize = (300, -1)
         boxsize = (300, 50)
         # adds columns
-        pub.subscribe(self.enable_tax, 'receive_tax')
-        pub.subscribe(self.receive_meta, 'receive_metadata')
-        pub.subscribe(self.check_networks, 'update_settings')
+        pub.subscribe(self.check_networks, 'network_settings')
         pub.subscribe(self.check_database, 'database_log')
+        pub.subscribe(self.set_settings, 'data_settings')
+        pub.subscribe(self.set_settings, 'input_settings')
+        pub.subscribe(self.set_settings, 'show_settings')
         pub.subscribe(self.update_pid, 'pid')
+        pub.subscribe(self.load_settings, 'load_settings')
 
-        self.settings = general_settings
-        self.agglom = None
-        self.agglom_weight = None
-        self.logic = None
-        self.assoc = None
+        self.settings = dict()
         self.networks = None
-        self.export = None
         self.checks = str()
-        self.address = ['bolt://localhost:7687']
-        self.username = ['neo4j']
-        self.password = ['neo4j']
+        self.address = 'bolt://localhost:7687'
+        self.username = 'neo4j'
+        self.password = 'neo4j'
         self.neo4j = None
         self.process = None
-        self.gml_name = ['network']
+        self.output = 'network'
+        self.metadata = None
+
+        self.procbioms = None
+        self.networks = None
 
         # defines columns
         self.leftsizer = wx.BoxSizer(wx.VERTICAL)
@@ -72,10 +88,11 @@ class DataPanel(wx.Panel):
         self.neo_btn = wx.Button(self, label="Select Neo4j folder", size=btnsize)
         self.neo_btn.Bind(wx.EVT_BUTTON, self.open_neo)
         self.neo_btn.Bind(wx.EVT_MOTION, self.update_help)
+        self.neo_txt = wx.TextCtrl(self, size=btnsize)
 
         self.address_txt = wx.StaticText(self, label='Neo4j database address')
         self.address_box = wx.TextCtrl(self, value='bolt://localhost:7687', size=btnsize)
-        self.username_txt = wx.StaticText(self, label='Neo4j username & password')
+        self.username_txt = wx.StaticText(self, label='Neo4j username and password')
         self.username_box = wx.TextCtrl(self, value='neo4j', size=btnsize)
         self.pass_box = wx.TextCtrl(self, value='neo4j', size=btnsize)
         self.address_box.Bind(wx.EVT_TEXT, self.update_address)
@@ -86,57 +103,12 @@ class DataPanel(wx.Panel):
         self.pass_box.Bind(wx.EVT_TEXT, self.update_pass)
         self.pass_box.Bind(wx.EVT_MOTION, self.update_help)
 
-        # set up database
-        self.data_button = wx.Button(self, label='Launch database', size=btnsize)
-        self.data_button.Bind(wx.EVT_MOTION, self.update_help)
-        self.data_button.Bind(wx.EVT_BUTTON, self.start_database)
-
-        # open database in browser
-        self.data_browser = wx.Button(self, label='Open database in browser', size=btnsize)
-        self.data_browser.Bind(wx.EVT_MOTION, self.update_help)
-        self.data_browser.Bind(wx.EVT_BUTTON, self.open_browser)
-        self.data_browser.Enable(False)
-
-        # close database
-        self.close_button = wx.Button(self, label='Close database', size=btnsize)
-        self.close_button.Bind(wx.EVT_MOTION, self.update_help)
-        self.close_button.Bind(wx.EVT_BUTTON, self.close_database)
-
-        # select taxonomic levels
-        self.tax_txt = wx.StaticText(self, label='Agglomerate edges to: ')
-        self.tax_choice = wx.ListBox(self, choices=['Species', 'Genus',
-                                                         'Family', 'Order', 'Class', 'Phylum'],
-                                          size=(boxsize[0], 110), style=wx.LB_MULTIPLE)
-        self.tax_choice.Bind(wx.EVT_MOTION, self.update_help)
-        self.tax_choice.Bind(wx.EVT_LISTBOX, self.get_levels)
-        self.tax_choice.Enable(False)
-        self.tax_txt.Enable(False)
-
-        # button for agglomeration
-        self.weight_txt = wx.StaticText(self, label='During network agglomeration:')
-        self.tax_weight = wx.ListBox(self, choices=['Take weight into account', 'Ignore weight'], size=(boxsize[0], 40))
-        self.tax_weight.Bind(wx.EVT_MOTION, self.update_help)
-        self.tax_weight.Bind(wx.EVT_LISTBOX, self.weight_agglomeration)
-        self.tax_weight.Enable(False)
-        self.weight_txt.Enable(False)
-
-
-        # button for sample association
-        self.assoc_txt = wx.StaticText(self, label='Associate taxa to: ' )
-        self.assoc_box = wx.ListBox(self, choices=['Select a BIOM or metadata file first'], size=(300, 90))
-        self.assoc_box.Bind(wx.EVT_MOTION, self.update_help)
-        self.assoc_box.Bind(wx.EVT_LISTBOX, self.run_association)
-        self.assoc_txt.Enable(False)
-        self.assoc_box.Enable(False)
-
-        # logic operations
-        self.logic_txt = wx.StaticText(self, label='For networks, perform the following logic operations...')
-        self.logic_choice = wx.ListBox(self, choices=['None', 'Union', 'Intersection', 'Difference'],
-                                          size=(boxsize[0], 70))
-        self.logic_choice.Bind(wx.EVT_MOTION, self.update_help)
-        self.logic_choice.Bind(wx.EVT_LISTBOX, self.get_logic)
-        self.logic_choice.Enable(False)
-        self.logic_txt.Enable(False)
+        # upload custom data
+        self.custom_btn = wx.Button(self, label='Upload additional data to network', size=btnsize)
+        self.custom_btn.Bind(wx.EVT_BUTTON, self.open_data)
+        self.custom_btn.Bind(wx.EVT_MOTION, self.update_help)
+        self.custom_txt = wx.TextCtrl(self, size=(300, 80), style=wx.TE_MULTILINE)
+        self.custom_btn.Enable(False)
 
         # review pane
         # review settings
@@ -144,17 +116,35 @@ class DataPanel(wx.Panel):
         self.review = wx.TextCtrl(self, value='', size=(boxsize[0], 300), style=wx.TE_READONLY | wx.TE_MULTILINE)
 
         # export to cytoscape
-        self.export_txt = wx.StaticText(self, label='Export to Cytoscape-compatible GraphML format.')
-        self.export_name = wx.TextCtrl(self, value='filename', size=btnsize)
+        self.export_txt = wx.StaticText(self, label='Prefix for graph:')
+        self.export_name = wx.TextCtrl(self, value='', size=btnsize)
         self.export_name.Bind(wx.EVT_TEXT, self.update_gml_name)
-        self.export_txt.Enable(False)
-        self.export_name.Enable(False)
+
+        # set up database
+        self.data_button = wx.Button(self, label='Launch database', size=btnsize)
+        self.data_button.Bind(wx.EVT_MOTION, self.update_help)
+        self.data_button.Bind(wx.EVT_BUTTON, self.start_database)
+
+        # clear database
+        self.clear_button = wx.Button(self, label='Clear database', size=btnsize)
+        self.clear_button.Bind(wx.EVT_MOTION, self.update_help)
+        self.clear_button.Bind(wx.EVT_BUTTON, self.clear)
+
+        # close database
+        self.close_button = wx.Button(self, label='Close database', size=btnsize)
+        self.close_button.Bind(wx.EVT_MOTION, self.update_help)
+        self.close_button.Bind(wx.EVT_BUTTON, self.close_database)
+
+        # open database in browser
+        self.data_browser = wx.Button(self, label='Open database in browser', size=btnsize)
+        self.data_browser.Bind(wx.EVT_MOTION, self.update_help)
+        self.data_browser.Bind(wx.EVT_BUTTON, self.open_browser)
+        self.data_browser.Enable(False)
 
         # Run button
-        self.go = wx.Button(self, label='Run database operations', size=(btnsize[0], 40))
-        self.go.Bind(wx.EVT_BUTTON, self.run_database)
-        self.go.SetFont(wx.Font(16, wx.DECORATIVE, wx.NORMAL, wx.BOLD))
-        self.go.SetBackgroundColour(wx.Colour(0, 153, 51))
+        self.go = wx.Button(self, label='Export graph', size=btnsize)
+        self.go.Bind(wx.EVT_BUTTON, self.writer)
+        self.go.Enable(False)
 
         self.leftsizer.AddSpacer(20)
         self.leftsizer.Add(self.address_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
@@ -163,33 +153,26 @@ class DataPanel(wx.Panel):
         self.leftsizer.Add(self.username_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.leftsizer.Add(self.username_box, flag=wx.ALIGN_LEFT)
         self.leftsizer.Add(self.pass_box, flag=wx.ALIGN_LEFT)
+        self.leftsizer.AddSpacer(10)
         self.leftsizer.Add(self.neo_btn, flag=wx.ALIGN_LEFT)
-        self.leftsizer.AddSpacer(20)
-        self.leftsizer.Add(self.data_button, flag=wx.ALIGN_LEFT)
-        self.leftsizer.Add(self.close_button, flag=wx.ALIGN_LEFT)
-        self.leftsizer.Add(self.data_browser, flag=wx.ALIGN_LEFT)
+        self.leftsizer.Add(self.neo_txt, flag=wx.ALIGN_LEFT)
         self.leftsizer.AddSpacer(20)
         self.leftsizer.Add(self.rev_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.leftsizer.Add(self.review, flag=wx.ALIGN_CENTER)
 
-
         self.rightsizer.AddSpacer(20)
-        self.rightsizer.Add(self.tax_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.rightsizer.Add(self.tax_choice, flag=wx.ALIGN_LEFT)
-        self.rightsizer.AddSpacer(20)
-        self.rightsizer.Add(self.weight_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.rightsizer.Add(self.tax_weight, flag=wx.ALIGN_LEFT)
-        self.rightsizer.AddSpacer(20)
-        self.rightsizer.Add(self.assoc_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.rightsizer.Add(self.assoc_box, flag=wx.ALIGN_LEFT)
-        self.rightsizer.AddSpacer(20)
-        self.rightsizer.Add(self.logic_txt)
-        self.rightsizer.Add(self.logic_choice)
+        self.rightsizer.Add(self.custom_btn, flag=wx.ALIGN_LEFT)
+        self.rightsizer.Add(self.custom_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.rightsizer.AddSpacer(20)
         self.rightsizer.Add(self.export_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.rightsizer.Add(self.export_name, flag=wx.ALIGN_LEFT)
         self.rightsizer.AddSpacer(20)
-        self.rightsizer.Add(self.go, flag=wx.ALIGN_CENTER)
+        self.rightsizer.AddSpacer(20)
+        self.rightsizer.Add(self.data_button, flag=wx.ALIGN_LEFT)
+        self.rightsizer.Add(self.clear_button, flag=wx.ALIGN_LEFT)
+        self.rightsizer.Add(self.close_button, flag=wx.ALIGN_LEFT)
+        self.rightsizer.Add(self.data_browser, flag=wx.ALIGN_LEFT)
+        self.rightsizer.Add(self.go, flag=wx.ALIGN_LEFT)
         self.rightsizer.AddSpacer(20)
 
         self.topsizer.AddSpacer(10)
@@ -215,13 +198,8 @@ class DataPanel(wx.Panel):
                         self.close_button: 'Shut down local Neo4j database.',
                         self.neo_btn: 'Location of your Neo4j folder.',
                         self.data_browser: 'Open Neo4j Browser and explore your data.',
-                        self.tax_choice: 'Associations that are taxonomically similar at the specified level are '
-                                         'combined into agglomerated associations. ',
-                        self.tax_weight: 'If selected, only edges with matching weight are agglomerated. ',
-                        self.assoc_box: "Taxa are linked to categorical variables through a hypergeometric test"
-                                           " and to continous variables through Spearman's rank correlation.",
-                        self.logic_choice: 'Find associations that are present in only one or all of your networks.',
-                        self.go: 'Run the selected operations and export a GraphML file.'
+                        self.go: 'Export a GraphML file from the database.',
+                        self.custom_btn: 'Add an edge list of metadata nodes to the graph database.'
                         }
 
 
@@ -234,188 +212,132 @@ class DataPanel(wx.Panel):
     def open_neo(self, event):
         dlg = wx.DirDialog(self, "Select Neo4j directory", style=wx.DD_DEFAULT_STYLE)
         if dlg.ShowModal() == wx.ID_OK:
-            self.neo4j = list()
-            self.neo4j.append(dlg.GetPath())
+            self.neo4j = dlg.GetPath()
+            self.neo_txt.SetValue(self.neo4j)
         self.send_settings()
         dlg.Destroy()
 
     def update_address(self, event):
         text = self.address_box.GetValue()
-        if self.address is None:
-            self.address = list()
-            self.address.append(text)
-        else:
-            self.address[0] = text
+        self.address = text
         self.send_settings()
 
     def update_username(self, event):
         text = self.username_box.GetValue()
-        if self.username is None:
-            self.username = list()
-            self.username.append(text)
-        else:
-            self.username[0] = text
+        self.username = text
         self.send_settings()
 
     def update_pass(self, event):
         text = self.pass_box.GetValue()
-        if self.password is None:
-            self.password = list()
-            self.password.append(text)
-        else:
-            self.password[0] = text
+        self.password = text
         self.send_settings()
-
 
     def update_pid(self, msg):
         """Listener for Neo4j PID."""
         self.process = msg
+        self.settings['pid'] = msg
+
+    def open_data(self, event):
+        dlg = wx.FileDialog(self, "Select additional metadata",
+                            defaultFile="",
+                            style=wx.FD_OPEN | wx.FD_MULTIPLE | wx.FD_CHANGE_DIR)
+        if dlg.ShowModal() == wx.ID_OK:
+            paths = dlg.GetPaths()
+            paths = [x.replace('\\', '/') for x in paths]
+            if len(paths) > 0:
+                self.metadata = paths
+        self.custom_txt.SetValue("\n".join(self.metadata))
+        self.send_settings()
+        try:
+            dlg = LoadingBar()
+            dlg.ShowModal()
+            eg = Thread(target=data_adder, args=(self.settings,))
+            eg.start()
+            eg.join()
+        except Exception:
+            logger.error("Failed to upload data to database. ", exc_info=True)
+        dlg.Destroy()
 
     def start_database(self, event):
         checks = str()
         try:
             eg = Thread(target=data_starter, args=(self.settings,))
             eg.start()
+            dlg = LoadingBar()
+            dlg.ShowModal()
+            eg.join()
         except Exception:
-            logger.error("Failed to initiate database", exc_info=True)
+            logger.error("Failed to initiate database. ", exc_info=True)
         # removed dlg.LoadingBar() dlg.ShowModal()
-        self.tax_txt.Enable(True)
-        self.tax_choice.Enable(True)
-        self.tax_weight.Enable(True)
-        self.data_browser.Enable(True)
-        self.assoc_txt.Enable(True)
-        self.assoc_box.Enable(True)
-        self.logic_txt.Enable(True)
-        self.logic_choice.Enable(True)
-        self.weight_txt.Enable(True)
+        self.custom_btn.Enable(True)
         self.export_name.Enable(True)
         self.export_txt.Enable(True)
-
-
+        self.data_browser.Enable(True)
+        self.go.Enable(True)
 
     def close_database(self, event):
-        try:
-            # there is a lingering Java process that places a lock on the database.
-            # terminating the subprocess does NOT terminate the Java process,
-            # so the store lock has to be deleted manually.
-            # This is different for Linux & Windows machines and may not be trivial
-            # however, PID solution may be platform-independent
-            # CURRENT SOLUTION:
-            # get parent PID of subprocess
-            # use psutil to get child PIDs
-            # kill child PIDs too
-            parent_pid = self.process
-            parent = Process(parent_pid)
-            children = parent.children(recursive=True)
-            for child in children:
-                child.kill()
-            # apparently killing the children also kills the parent
-        except Exception:
-            logger.error("Failed to close database", exc_info=True)
+        eg = Thread(target=data_closer, args=(self.settings,))
+        eg.start()
+        dlg = LoadingBar()
+        dlg.ShowModal()
+        eg.join()
+        pub.sendMessage('update', msg='Completed database operations!')
+
+    def writer(self, event):
+        eg = Thread(target=data_writer, args=(self.settings,))
+        eg.start()
+        dlg = LoadingBar()
+        dlg.ShowModal()
+        eg.join()
+        pub.sendMessage('update', msg='Completed database operations!')
+
+    def clear(self, event):
+        eg = Thread(target=data_clear, args=(self.settings,))
+        eg.start()
+        dlg = LoadingBar()
+        dlg.ShowModal()
+        eg.join()
+        pub.sendMessage('update', msg='Completed database operations!')
 
     def open_browser(self, event):
         url = "http://localhost:7474/browser/"
         webbrowser.open(url)
 
-    def enable_tax(self, msg):
-        self.tax_choice.Enable(True)
-
-    def get_levels(self, event):
-        text = list()
-        ids = self.tax_choice.GetSelections()
-        for i in ids:
-            text.append(self.tax_choice.GetString(i))
-        self.agglom = list(text)
-        self.send_settings()
-
-    def weight_agglomeration(self, event):
-        self.agglom_weight = list()
-        name = self.tax_weight.GetSelection()
-        text = self.tax_weight.GetString(name)
-        self.agglom_weight.append(text)
-        self.send_settings()
-
-    def run_association(self, event):
-        self.assoc = list()
-        text = list()
-        ids = self.assoc_box.GetSelections()
-        for i in ids:
-            text.append(self.assoc_box.GetString(i))
-        self.assoc = text
-        self.send_settings()
-
-    def get_logic(self, event):
-        self.logic = list()
-        name = self.logic_choice.GetSelection()
-        text = self.logic_choice.GetString(name)
-        self.logic.append(text)
-        self.send_settings()
-
-
     def update_gml_name(self, event):
         text = self.export_name.GetValue()
-        self.gml_name = list()
-        self.gml_name.append(text)
+        self.output = text
         self.send_settings()
-
-    def receive_meta(self, msg):
-        """
-        Listener function that registers whether a BIOM file with metadata
-        or separate metadata file has been supplied.
-        It opens the file to check whether there are variables present,
-        and updates the split_list listbox to include these variables.
-        """
-        self.assoc_box.Set(msg)
 
     def send_settings(self):
         """
         Publisher function for settings
         """
-        settings = {'assoc': self.assoc, 'agglom': self.agglom,
-                    'logic': self.logic, 'agglom_weight': self.agglom_weight,
-                    'export': self.export,
+        settings = {'output': self.output, 'add': self.metadata,
                     'address': self.address, 'username': self.username,
-                    'password': self.password, 'neo4j': self.neo4j, 'gml_name': self.gml_name}
-        pub.sendMessage('update_settings', msg=settings)
-
-    def run_database(self, event):
-        try:
-            eg = Thread(target=data_worker, args=(self.settings,))
-            eg.start()
-        except Exception:
-            logger.error("Failed to start database worker", exc_info=True)
-        # removed LoadingBar()
-
+                    'password': self.password, 'neo4j': self.neo4j}
+        pub.sendMessage('data_settings', msg=settings)
 
     def check_networks(self, msg):
         # define how files should be checked for, it is important that import functions work!
-        try:
-            if msg['network']:
-                for file in msg['network']:
-                    try:
-                        network = nx.read_weighted_edgelist(file)
-                        self.checks += "Loaded network from " + file + ". \n\n"
-                        nodes = len(network.nodes)
-                        edges = len(network.edges)
-                        self.checks += "This network has " + str(nodes) + \
-                                       " nodes and " + str(edges) + " edges. \n\n"
-                    except (TypeError, NetworkXError):
-                        wx.LogError("Could not import edge list '%s'." % file)
-                        logger.error("Could not import edge list", exc_info=True)
-                    try:
-                        weight = nx.get_edge_attributes(network, 'weight')
-                        if len(weight) > 0:
-                            self.checks += 'This is a weighted network. \n\n'
-                        else:
-                            self.checks += 'This is an unweighted network. \n\n'
-                    except (TypeError, NetworkXError):
-                        wx.LogError("Could not access edge metadata '%s'." % file)
-                        logger.error("Could not access edge metadata", exc_info=True)
-                    # need to check if network IDs match IDs in the BIOM files.
+        if 'network' in msg:
+            if msg['network'] is not None:
+                filelist = deepcopy(msg['network'])
+                for file in filelist:
+                    network = nx.read_weighted_edgelist(file)
+                    self.checks += "Loaded network from " + file + ". \n\n"
+                    nodes = len(network.nodes)
+                    edges = len(network.edges)
+                    self.checks += "This network has " + str(nodes) + \
+                                   " nodes and " + str(edges) + " edges. \n\n"
+                    weight = nx.get_edge_attributes(network, 'weight')
+                    if len(weight) > 0:
+                        self.checks += 'This is a weighted network. \n\n'
+                    else:
+                        self.checks += 'This is an unweighted network. \n\n'
                     allbioms = list()
-                    allbioms.extend(msg['procbioms'])
-                    allbioms.extend(msg['otu_table'])
-                    allbioms.extend(msg['biom_file'])
+                    for level in msg['procbioms']:
+                        for biom in msg['procbioms'][level]:
+                            allbioms.append(msg['procbioms'][level][biom])
                     match = 0
                     taxa = None
                     for biomfile in allbioms:
@@ -424,8 +346,8 @@ class DataPanel(wx.Panel):
                             taxa = biomtab.ids(axis='observation')
                         except TypeError:
                             wx.LogError("Could not access source BIOM file '%s'." % file)
-                            logger.error("Could not access source BIOM file", exc_info=True)
-                        if taxa:
+                            logger.error("Could not access source BIOM file. ", exc_info=True)
+                        if len(taxa) > 1:
                             nodes = list(network.nodes)
                             if all(elem in taxa for elem in nodes):
                                 match += 1
@@ -433,14 +355,78 @@ class DataPanel(wx.Panel):
                                                ' matched node identifiers in ' + file + '. \n\n'
                     if match == 0:
                         wx.LogError("No BIOM file matched network nodes!")
-                        logger.error("No BIOM file matched network nodes!", exc_info=True)
-                self.review.SetValue(self.checks)
-        except KeyError:
-            pass
+                        logger.error("No BIOM file matched network nodes!. ", exc_info=True)
+            self.review.SetValue(self.checks)
 
     def check_database(self, msg):
         self.checks += msg
         self.review.SetValue(self.checks)
+
+    def load_settings(self, msg):
+        """
+        Listener function that changes input values
+        to values specified in settings file.
+        """
+        self.settings = msg
+        if msg['neo4j'] is not None:
+            self.neo4j = msg['neo4j']
+            self.neo_txt.SetValue(self.neo4j)
+        else:
+            self.neo4j = None
+            self.data_browser.Enable(False)
+            self.go.Enable(False)
+            self.custom_btn.Enable(False)
+            self.checks = ''
+            self.review.SetValue(self.checks)
+            self.custom_txt.SetValue('')
+        if msg['password'] is not None:
+            self.password = msg['password']
+        if msg['output'] is not None:
+            self.output = msg['output']
+        if msg['address'] is not None:
+            self.address = msg['address']
+        if msg['username'] is not None:
+            self.username = msg['username']
+        if msg['output'] is not None:
+            self.export_name.SetValue(self.output)
+        else:
+            self.output = None
+            self.export_name.SetValue('')
+        if msg['address'] is not None:
+            self.address_box.SetValue(self.address)
+        else:
+            self.address = None
+            self.address_box.SetValue('')
+        if msg['username'] is not None:
+            self.username_box.SetValue(self.username)
+        else:
+            self.username = None
+            self.username_box.SetValue('')
+        if msg['password'] is not None:
+            self.pass_box.SetValue(self.password)
+        else:
+            self.password = None
+            self.pass_box.SetValue('')
+        if 'pid'in msg:
+            existing_pid = pid_exists(self.settings['pid'])
+            if existing_pid:
+                self.checks = ("Existing database process with PID " + str(msg['pid']) + ". \n\n") + self.checks
+                self.custom_btn.Enable(True)
+                self.export_name.Enable(True)
+                self.export_txt.Enable(True)
+                self.data_browser.Enable(True)
+                self.go.Enable(True)
+        self.send_settings()
+
+    def set_settings(self, msg):
+        """
+        Stores settings file as tab property so it can be read by save_settings.
+        """
+        try:
+            for key in msg:
+                self.settings[key] = msg[key]
+        except Exception:
+            logger.error("Failed to save settings. ", exc_info=True)
 
 
 class LoadingBar(wx.Dialog):
@@ -471,135 +457,49 @@ class LoadingBar(wx.Dialog):
             self.Destroy()
 
 
-def data_worker(inputs):
-    """
-    Carries out operations on database as specified by user.
-    """
-    checks = str()
-    try:
-        # pub.sendMessage('update', msg='Starting database drivers.')
-        sys.stdout.write('Starting database drivers.')
-        importdriver = ImportDriver(user=inputs['username'][0],
-                                    password=inputs['password'][0],
-                                    uri=inputs['address'][0])
-        statdriver = Driver(user=inputs['username'][0],
-                            password=inputs['password'][0],
-                            uri=inputs['address'][0])
-    except Exception:
-        logger.error("Failed to start database worker. ", exc_info=True)
-    try:
-        # write operations here
-        if inputs['agglom']:
-            tax_list = ['Species', 'Genus', 'Family', 'Order', 'Class', 'Phylum', 'Kingdom']
-            level_id = tax_list.index(inputs['agglom'][0])
-            if inputs['agglom_weight'][0]:
-                mode = inputs['agglom_weight'][0]
-            else:
-                mode = 'Ignore weight'
-            for level in range(0, level_id+1):
-                # pub.sendMessage('update', msg="Agglomerating edges...")
-                sys.stdout.write("Agglomerating edges...")
-                statdriver.agglomerate_network(level=tax_list[level], mode=mode)
-            checks += 'Successfully agglomerated edges. \n'
-        if inputs['assoc']:
-            # pub.sendMessage('update', msg="Associating samples...")
-            sys.stdout.write("Associating samples...")
-            statdriver.associate_samples(properties=inputs['assoc'])
-            checks += 'Completed associations. \n'
-        pairlist = None
-        if inputs['logic']:
-            if inputs['logic'][0] == 'Union':
-                pairlist = statdriver.graph_union()
-            if inputs['logic'][0] == 'Intersection':
-                pairlist = statdriver.graph_intersection()
-            if inputs['logic'][0] == 'Difference':
-                pairlist = statdriver.graph_difference()
-            checks += 'Logic operations completed. \n'
-        filename = inputs['fp'][0] + '/' + inputs['gml_name'][0] + '.graphml'
-        # pub.sendMessage('update', msg="Exporting network...")
-        sys.stdout.write("Exporting network to: " + filename + "\n")
-        checks += "Exporting network to: " + filename + "\n"
-        importdriver.export_network(path=filename, pairlist=pairlist, mode='basic')
-        # pub.sendMessage('update', msg="Completed database operations!")
-        sys.stdout.write("Completed database operations!")
-        checks += 'Completed database operations! \n'
-    except Exception:
-        logger.error("Failed to run database worker", exc_info=True)
-        checks += 'Failed to run database worker. \n'
-    try:
-        logfile = open(resource_path("massoc.log"), 'r')
-        logtext = logfile.read()
-        logfile.close()
-        dump = open(inputs['fp'][0], 'w')
-        dump.write(logtext)
-        dump.close()
-    except Exception:
-        pass
-    pub.sendMessage('database_log', msg=checks)
-
-
 def data_starter(inputs):
     """Starts up database and uploads specified files. """
-    checks = str()
-    try:
-        pub.sendMessage('update', msg='Starting database.')
-        # run database
-        if system() == 'Windows':
-            filepath = inputs['neo4j'][0] + '/bin/neo4j.bat console'
-        else:
-            filepath = inputs['neo4j'][0] + '/bin/neo4j console'
-        filepath = filepath.replace("\\", "/")
-        if system() == 'Windows' or system() == 'Darwin':
-            p = Popen(filepath, shell=True)
-        else:
-            # note: old version used gnome-terminal, worked with Ubuntu
-            # new version uses xterm to work with macOS
-            # check if this conflicts!
-            p = Popen(["gnome-terminal", "-e", filepath])  # x-term compatible alternative terminal
-        pub.sendMessage('pid', msg=p.pid)
-    except Exception:
-        logger.error("Failed to initiate database", exc_info=True)
-    i = 0
-    importdriver = None
-    while not importdriver and i < 10:
-        sleep(12)
-        importdriver = ImportDriver(user=inputs['username'][0],
-                                    password=inputs['password'][0],
-                                    uri=inputs['address'][0])
-        i += 1
-    if i == 10:
-        logger.error("Unable to access Neo4j database.", exc_info=True)
-        # pub.sendMessage('update', msg='Could not access Neo4j database!')
-        sys.stdout.write('Could not access Neo4j database!')
-    importdriver.clear_database()
-    try:
-        # pub.sendMessage('update', msg='Uploading BIOM files...')
-        sys.stdout.write('Uploading BIOM files...')
-        itemlist = list()
-        for item in inputs['procbioms']:
-            biomfile = load_table(item)
-            importdriver.convert_biom(biomfile=biomfile, exp_id=item)
-            itemlist.append(item)
-    except Exception:
-        checks += 'Unable to upload BIOM files to Neo4j database. \n'
-        logger.error("Unable to upload BIOM files to Neo4j database.", exc_info=True)
-    try:
-        # pub.sendMessage('update', msg='Uploading network files...')
-        sys.stdout.write('Uploading network files...')
-        for item in inputs['network']:
-            network = nx.read_weighted_edgelist(item)
-            importdriver.convert_networkx(network=network, network_id=item, mode='weight')
-            itemlist.append(item)
-        checks += 'Successfully uploaded the following items and networks to the database: \n'
-        for item in itemlist:
-            checks += (item + '\n')
-        checks += '\n'
-    except Exception:
-        checks += 'Unable to upload network files to Neo4j database.\n'
-        logger.error("Unable to upload network files to Neo4j database.", exc_info=True)
-    # pub.sendMessage('update', msg='Completed database operations!')
-    sys.stdout.write('Completed database operations!')
-    pub.sendMessage('database_log', msg=checks)
+    # first check if process already exists
+    inputs['job'] = 'upload'
+    run_neo4j(inputs, publish=True)
+    # get PID setting
+    settings = read_settings(inputs['fp'] + '/settings.json')
+    new_pid = inputs['pid']
+    pub.sendMessage('pid', msg=new_pid)
+    pub.sendMessage('update', msg='Completed database operations!')
+
+
+def data_writer(inputs):
+    """Exports GraphML file."""
+    inputs['job'] = 'write'
+    run_neo4j(inputs, publish=True)
+    pub.sendMessage('update', msg='Completed database operations!')
+
+
+def data_clear(inputs):
+    """Clears the database."""
+    inputs['job'] = 'clear'
+    run_neo4j(inputs, publish=True)
+    # get PID setting
+    settings = read_settings(inputs['fp'] + '/settings.json')
+    new_pid = inputs['pid']
+    pub.sendMessage('pid', msg=new_pid)
+    pub.sendMessage('update', msg='Completed database operations!')
+
+
+def data_adder(inputs):
+    """Adds edge list of node properties to Neo4j database."""
+    inputs['job'] = 'add'
+    run_neo4j(inputs, publish=True)
+    pub.sendMessage('update', msg='Completed database operations!')
+
+
+def data_closer(inputs):
+    """Adds edge list of node properties to Neo4j database."""
+    inputs['job'] = 'quit'
+    run_neo4j(inputs, publish=True)
+    sleep(3)
+    pub.sendMessage('update', msg='Completed database operations!')
 
 
 if __name__ == "__main__":

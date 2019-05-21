@@ -11,24 +11,42 @@ __license__ = 'Apache 2.0'
 import os
 from threading import Thread
 
-import numpy as np
 import wx
-from biom import load_table
-from biom.parse import MetadataMap
-from massoc.scripts.batch import Batch
-from massoc.scripts.netwrap import Nets
 from wx.lib.pubsub import pub
 import massoc
-from massoc.scripts.main import run_parallel, resource_path
-from massoc.scripts.main import general_settings
-from copy import deepcopy
+from run_massoc import run_network, get_input
+from massoc.scripts.batch import read_settings
 from time import sleep
-
+import sys
 import logging
-import logging.handlers as handlers
+from copy import deepcopy
+import os
+import logging.handlers
+
 logger = logging.getLogger()
-logger.setLevel(logging.WARNING)
-import multiprocessing
+logger.setLevel(logging.INFO)
+
+# handler to sys.stdout
+sh = logging.StreamHandler(sys.stdout)
+sh.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+sh.setFormatter(formatter)
+logger.addHandler(sh)
+
+# handler to file
+# only handler with 'w' mode, rest is 'a'
+# once this handler is started, the file writing is cleared
+# other handlers append to the file
+logpath = "\\".join(os.getcwd().split("\\")[:-1]) + '\\massoc.log'
+# filelog path is one folder above massoc
+# pyinstaller creates a temporary folder, so log would be deleted
+fh = logging.handlers.RotatingFileHandler (maxBytes=500,
+                                      filename=logpath, mode='a')
+fh.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+logger.addHandler(fh)
+
 
 class NetworkPanel(wx.Panel):
     def __init__(self, parent):
@@ -43,17 +61,21 @@ class NetworkPanel(wx.Panel):
         self.tools = None
         self.spar_boot = None
         self.spar_pval = None
-        self.cores = None
+        self.cores = 4
         self.conet = None
+        self.conet_bash = None
         self.spar = None
 
         # while mainframe contains the main settings file, the NetworkPanel also needs it to generate a command call
-        self.settings = general_settings
+        self.settings = dict()
+        self.settings['procbioms'] = None
+        self.settings['network'] = None
 
         pub.subscribe(self.review_settings, 'show_settings')
-        pub.subscribe(self.format_settings, 'update_settings')
-        pub.subscribe(self.clear_settings_net, 'clear_settings')
-        pub.subscribe(self.load_settings_net, 'load_settings')
+        pub.subscribe(self.format_settings, 'input_settings')
+        pub.subscribe(self.format_settings, 'process_settings')
+        pub.subscribe(self.format_settings, 'network_settings')
+        pub.subscribe(self.load_settings, 'load_settings')
         pub.subscribe(self.toggle_network, 'toggle_network')
 
         self.topsizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -106,14 +128,11 @@ class NetworkPanel(wx.Panel):
 
         # CoNet settings
         self.conetbox = wx.BoxSizer(wx.VERTICAL)
-        self.conet_sets = wx.StaticText(self, label='To adjust CoNet settings, replace the CoNet BASH call \n'
-                                                   'in this file by new ones generated with the original \n'
-                                                   'CoNet application. ')
-        self.conet_file = wx.GenericDirCtrl(self, dir=(os.path.dirname(massoc.__file__) + '\\execs\\CoNet.sh'),
-                                            size=(boxsize[0], 300))
+        self.conet_sets = wx.StaticText(self, label='To adjust CoNet settings, provide an alternative CoNet BASH call.')
+        self.conet_bash_txt = wx.TextCtrl(self, value='', size=btnsize)
         self.conetbox.Add(self.conet_sets, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.conetbox.AddSpacer(5)
-        self.conetbox.Add(self.conet_file, flag=wx.ALIGN_LEFT)
+        self.conetbox.Add(self.conet_bash_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.conetbox.ShowItems(show=False)
 
         # SPIEC-EASI settings
@@ -140,10 +159,6 @@ class NetworkPanel(wx.Panel):
         # review settings
         self.rev_text = wx.StaticText(self, label='Current settings')
         self.review = wx.TextCtrl(self, value='', size=(boxsize[0], 200), style=wx.TE_READONLY | wx.TE_MULTILINE)
-        self.call = wx.Button(self, label='Export command line call', size=btnsize)
-        self.call.Bind(wx.EVT_BUTTON, self.generate_call)
-        self.call.Bind(wx.EVT_MOTION, self.update_help)
-        self.call.SetFont(wx.Font(16, wx.DECORATIVE, wx.NORMAL, wx.BOLD))
 
         # Run button
         self.go = wx.Button(self, label='Run network inference', size=(btnsize[0], 40))
@@ -158,8 +173,6 @@ class NetworkPanel(wx.Panel):
         self.rightsizer.Add(self.rev_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
         self.rightsizer.Add(self.review, flag=wx.ALIGN_LEFT)
         self.rightsizer.AddSpacer(20)
-        self.rightsizer.Add(self.call, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        self.rightsizer.AddSpacer(10)
         self.rightsizer.Add(self.go, flag=wx.ALIGN_CENTER_HORIZONTAL)
 
         self.topleftsizer.Add(self.tool_txt, flag=wx.ALIGN_CENTER_HORIZONTAL)
@@ -188,7 +201,6 @@ class NetworkPanel(wx.Panel):
 
         # help strings for buttons
         self.buttons = {self.tool_box: 'Run SparCC, CoNet or SPIEC-EASI. Check the help files for more information.',
-                        self.call: 'Generate a command line call to run this pipeline.',
                         self.jobs_choice: 'Distributing jobs over multiple processes = lower runtime.',
                         self.conet_button: 'Select the location of your CoNet.jar file. ',
                         self.spar_button: 'Select the location of your SparCC folder. '}
@@ -209,6 +221,19 @@ class NetworkPanel(wx.Panel):
             self.sparbox.ShowItems(show=False)
             self.conetbox.ShowItems(show=True)
             self.spiecbox.ShowItems(show=False)
+            dlg = wx.FileDialog(
+                self, message="Select count tables",
+                defaultFile="",
+                style=wx.FD_OPEN | wx.FD_MULTIPLE | wx.FD_CHANGE_DIR
+            )
+            if dlg.ShowModal() == wx.ID_OK:
+                path = dlg.GetPath()
+                path = path.replace('\\', '/')
+                self.conet_bash = path
+                if len(path) > 0:
+                    self.conet_bash_txt.SetValue(self.conet_bash)
+            self.send_settings()
+            dlg.Destroy()
         if tool == 'SPIEC-EASI':
             self.sparbox.ShowItems(show=False)
             self.conetbox.ShowItems(show=False)
@@ -221,18 +246,16 @@ class NetworkPanel(wx.Panel):
         """
         dlg = wx.DirDialog(self, "Select CoNet3 directory", style=wx.DD_DEFAULT_STYLE)
         if dlg.ShowModal() == wx.ID_OK:
-            self.conet = list()
-            self.conet.append(dlg.GetPath())
-        self.conet_txt.SetValue(self.conet[0])
+            self.conet = dlg.GetPath()
+        self.conet_txt.SetValue(self.conet)
         self.send_settings()
         dlg.Destroy()
 
     def open_spar(self, event):
         dlg = wx.DirDialog(self, "Select SparCC directory", style=wx.DD_DEFAULT_STYLE)
         if dlg.ShowModal() == wx.ID_OK:
-            self.spar = list()
-            self.spar.append(dlg.GetPath())
-        self.spar_txt.SetValue(self.spar[0])
+            self.spar = dlg.GetPath()
+        self.spar_txt.SetValue(self.spar)
         self.send_settings()
         dlg.Destroy()
 
@@ -255,8 +278,7 @@ class NetworkPanel(wx.Panel):
         self.send_settings()
 
     def send_cores(self, event):
-        self.cores = list()
-        self.cores.append(self.jobs_choice.GetValue())
+        self.cores = int(self.jobs_choice.GetValue())
         self.send_settings()
 
     def change_spiec_alg(self, event):
@@ -277,7 +299,7 @@ class NetworkPanel(wx.Panel):
             spiec_script.write(commands)
             spiec_script.close()
         except Exception:
-            logger.error("Failed to change SPIEC-EASI algorithm", exc_info=True)
+            logger.error("Failed to change SPIEC-EASI algorithm, ", exc_info=True)
 
     def change_spiec_stars(self, event):
         """Takes settings input from GUI and uses it to rewrite the SPIEC-EASI script in execs."""
@@ -296,32 +318,7 @@ class NetworkPanel(wx.Panel):
             spiec_script.write(commands)
             spiec_script.close()
         except Exception:
-            logger.error("Failed to change number of repetitions", exc_info=True)
-
-    def generate_call(self, event):
-        # otu_meta, nclust are not integrated in GUI yet
-        try:
-            command = list()
-            command.append('main.py')
-            command_dict = {'biom_file': '-biom', 'otu_table': '-otu', 'tax_table': '-tax', 'sample_data': '-s',
-                            'otu_meta': '-od', 'cluster': '-cl', 'split': '-split', 'nclust': '-nclust', 'cores': '-cores',
-                            'prev': '-prev', 'fp': '-o', 'levels': '-levels', 'tools': '-tools', 'spiec': '-spiec',
-                            'conet': '-conet', 'spar': 'spar', 'spar_pval': '-spar_pval', 'spar_boot': '-spar_boot',
-                            'name': '-n', 'rar': '-rar', 'min': '-min'}
-            for i in command_dict:
-                if self.settings[i] is not None:
-                    if len(self.settings[i]) > 0:
-                        command.append(command_dict[i])
-                        if len(self.settings[i]) > 1:
-                            subcommand = ' '.join(self.settings[i])
-                            command.append(subcommand)
-                        else:
-                            command.append(self.settings[i][0])
-            command = ' '.join(command)
-            dlg = wx.TextEntryDialog(None, "", "Command line call", command)
-            dlg.ShowModal()
-        except Exception:
-            logger.error("Failed to generate command line call", exc_info=True)
+            logger.error("Failed to change number of repetitions. ", exc_info=True)
 
     def run_network(self, event):
         self.settings['network'] = list()
@@ -331,8 +328,8 @@ class NetworkPanel(wx.Panel):
         for tool in self.settings['tools']:
             for level in self.settings['levels']:
                 for name in self.settings['name']:
-                    filename = self.settings['fp'][0] + '/' + tool + '_' + name + '_' + level + '.txt'
-                    biomname = self.settings['fp'][0] + '/' + name + '_' + level + '.hdf5'
+                    filename = self.settings['fp'] + '/' + tool + '_' + name + '_' + level + '.txt'
+                    biomname = self.settings['fp'] + '/' + name + '_' + level + '.hdf5'
                     biom_names.append(biomname)
                     network_names.append(filename)
         self.settings['network'] = network_names
@@ -340,11 +337,11 @@ class NetworkPanel(wx.Panel):
         try:
             eg = Thread(target=massoc_worker, args=(self.settings,))
             eg.start()
+            dlg = LoadingBar(self.settings)
+            dlg.ShowModal()
             eg.join()  # necessary for ubuntu thread to quit crashing
         except Exception:
-            logger.error("Failed to start worker thread", exc_info=True)
-        # dlg = LoadingBar(self.settings)
-        # dlg.ShowModal()
+            logger.error("Failed to start worker thread. ", exc_info=True)
         self.send_settings()
 
 
@@ -366,15 +363,14 @@ class NetworkPanel(wx.Panel):
                         'min': 'Minimal mean count:'}
         for i in command_dict:
             subcommand = list()
-            if self.settings[i] is not None:
-                if len(self.settings[i]) > 0:
-                    subcommand.append(command_dict[i])
-                    if len(self.settings[i]) > 1:
-                        multicommand = ' '.join(self.settings[i])
-                        subcommand.append(multicommand)
-                    else:
-                        subcommand.append(self.settings[i][0])
-                    reviewtext.append(' '.join(subcommand))
+            if i in self.settings and self.settings[i] is not None:
+                subcommand.append(command_dict[i])
+                if type(self.settings[i]) == list:
+                    multicommand = ' '.join(self.settings[i])
+                    subcommand.append(multicommand)
+                else:
+                    subcommand.append(str(self.settings[i]))
+                reviewtext.append(' '.join(subcommand))
         reviewtext = '\n'.join(reviewtext)
         self.review.SetValue(reviewtext)
 
@@ -383,9 +379,10 @@ class NetworkPanel(wx.Panel):
         Publisher function for settings
         """
         settings = {'tools': self.tools, 'spar_pval': self.spar_pval, 'spar_boot': self.spar_boot,
-                    'cores': self.cores, 'spar': self.spar, 'conet': self.conet,
+                    'cores': self.cores, 'spar': self.spar, 'conet': self.conet, 'conet_bash': self.conet_bash,
+                    'spiec': None,  # it is not possible to specify R file from GUI
                     'procbioms': self.settings['procbioms'], 'network': self.settings['network']}
-        pub.sendMessage('update_settings', msg=settings)
+        pub.sendMessage('network_settings', msg=settings)
 
     def format_settings(self, msg):
         """
@@ -398,75 +395,73 @@ class NetworkPanel(wx.Panel):
             pass
         if key in msg is 'cluster':  # at the moment, the maximum # of clusters to evaluate cannot be selected
             self.settings['nclust'] = [4]
-        if self.settings['tools'] is not None and self.settings['levels'] is not None:
+        if 'tools' in self.settings and 'levels' in self.settings and \
+                self.settings['tools'] is not None and self.settings['levels'] is not None:
             njobs = len(self.settings['tools']) * len(self.settings['levels'])
             njobs = 'Number of jobs to run: ' + str(njobs)
             self.jobs_text.SetLabel(label=njobs)
 
-    def clear_settings_net(self, msg):
-        """
-        Listener function that clears all input boxes.
-        The new "empty" settings are not sent to
-        the mainframe or network tabs,
-        because those also receive this message.
-        """
-        if msg == 'CLEAR':
-            self.jobs_choice.SetValue("")
-            self.review.SetValue("")
-            for cb in self.tool_box.GetSelections():
-                self.tool_box.Deselect(cb, False)
-            for cb in np.nditer(self.settings_choice.GetSelections):
-                self.settings_choice.Deselect(cb)
-            self.spar_boot.SetValue("100")
-            self.spar_pval.SetValue("0.001")
-            for cb in np.nditer(self.spiec_alg.GetSelections):
-                self.spiec_alg.Deselect(cb)
-
-            self.spiec_star.SetValue("50")
-            self.settings = {'biom_file': None, 'otu_table': None, 'tax_table': None, 'sample_data': None,
-                             'otu_meta': None, 'cluster': None, 'split': None, 'prev': None, 'fp': None,
-                             'levels': None, 'tools': None, 'spiec': None, 'conet': None, 'spar': None,
-                             'spar_pval': None, 'min': None,
-                             'spar_boot': None, 'nclust': None, 'name': None, 'cores': None, 'rar': None}
-            self.send_settings()
-
-    def load_settings_net(self, msg):
+    def load_settings(self, msg):
         """
         Listener function that changes input values
         to values specified in settings file.
         """
-        self.settings = msg
+        self.settings = deepcopy(msg)
         if msg['tools'] is not None:
             self.tools = msg['tools']
             tooldict = {'sparcc': 0, 'conet': 1, 'spiec-easi': 2}
             for tool in msg['tools']:
-                self.tool_box.SetSelection(tooldict[tool], True)
+                self.tool_box.SetSelection(tooldict[tool])
+        else:
+            self.tools = None
+            choice = self.tool_box.GetSelections()
+            for selection in choice:
+                self.tool_box.Deselect(selection)
         if msg['spar_boot'] is not None:
             self.sparbox.ShowItems(show=True)
             self.Layout()
             self.spar_boot = msg['spar_boot']
-            self.spar_boot_txt.SetValue(msg['spar_boot'][0])
+            self.spar_boot_txt.SetValue(msg['spar_boot'])
+        else:
+            self.sparbox.ShowItems(show=False)
+            self.spar_boot_txt.SetValue('')
+            self.spar_boot = None
         if msg['spar_pval'] is not None:
             self.sparbox.ShowItems(show=True)
             self.Layout()
             self.spar_pval = msg['spar_pval']
-            self.spar_pval_txt.SetValue(msg['spar_pval'][0])
+            self.spar_pval_txt.SetValue(msg['spar_pval'])
+        else:
+            self.sparbox.ShowItems(show=False)
+            self.spar_pval_txt.SetValue('')
+            self.spar_pval = None
         if msg['cores'] is not None:
             self.cores = msg['cores']
-            self.jobs_choice.SetValue(msg['cores'][0])
+            self.jobs_choice.SetValue(str(msg['cores']))
+        else:
+            self.cores = None
+            self.jobs_choice.SetValue('')
         if msg['conet'] is not None:
-            self.conet = self.settings['conet']
-            self.conet_txt.SetValue(self.settings['conet'][0])
+            self.conet = msg['conet']
+            self.conet_txt.SetValue(self.conet)
+        if msg['conet_bash'] is not None:
+            self.conet_bash = msg['conet_bash']
+            self.conet_bash_txt.SetValue(msg['conet_bash'])
+        else:
+            self.conet_bash = None
+            self.conet_bash_txt.SetValue('')
         if msg['spar'] is not None:
-            self.spar = self.settings['spar']
-            self.spar_txt.SetValue(self.settings['spar'][0])
+            self.spar = msg['spar']
+            self.spar_txt.SetValue(msg['spar'])
+        else:
+            self.spar = None
+            self.spar_txt.SetValue('')
         self.send_settings()
 
     def toggle_network(self, msg):
         if msg == 'Yes':
             self.tool_txt.Enable(True)
             self.jobs_choice.Enable(True)
-            self.call.Enable(True)
             self.go.Enable(True)
             self.tool_box.Enable(True)
             self.conet_button.Enable(True)
@@ -478,7 +473,6 @@ class NetworkPanel(wx.Panel):
         if msg == 'No':
             self.tool_txt.Enable(False)
             self.jobs_choice.Enable(False)
-            self.call.Enable(False)
             self.go.Enable(False)
             self.tool_box.Enable(False)
             self.conet_button.Enable(False)
@@ -510,7 +504,6 @@ class LoadingBar(wx.Dialog):
         if msg is 'Writing to disk...' or 'Starting network inference. This may take some time!':
             self.count += 1
         self.progress.SetValue(self.count)
-        print(msg)
         self.text.SetLabel(msg)
         if msg == 'Finished running network inference!':
             sleep(3)
@@ -522,105 +515,8 @@ def massoc_worker(inputs):
     Alternative version of massoc's main pipe.
     Uses publisher to send messages instead of sys.stdout.write.
     """
-    try:
-        filestore = {}
-        if inputs['biom_file'] is None:
-            if inputs['otu_table'] is None:
-                raise ValueError("Please supply either a biom file "
-                                 "or a tab-delimited OTU table!")
-        i = 0
-        if inputs['name'] is None:
-            inputs['name'] = list()
-            inputs['name'].append('file_')
-        if inputs['biom_file'] is not None:
-            for x in inputs['biom_file']:
-                biomtab = load_table(x)
-                filestore[inputs['name'][i]] = biomtab
-                i += 1
-        if inputs['otu_table'] is not None:
-            j = 0  # j is used to match sample + tax data to OTU data
-            for x in inputs['otu_table']:
-                input_fp = x
-                sample_metadata_fp = None
-                observation_metadata_fp = None
-                obs_data = None
-                sample_data = None
-                biomtab = load_table(input_fp)
-                try:
-                    sample_metadata_fp = inputs['sample_data'][j]
-                    observation_metadata_fp = inputs['tax_table'][j]
-                except KeyError:
-                    pass
-                if sample_metadata_fp is not None:
-                    sample_f = open(sample_metadata_fp, 'r')
-                    sample_data = MetadataMap.from_file(sample_f)
-                    sample_f.close()
-                    biomtab.add_metadata(sample_data, axis='sample')
-                if observation_metadata_fp is not None:
-                    obs_f = open(observation_metadata_fp, 'r')
-                    obs_data = MetadataMap.from_file(obs_f)
-                    obs_f.close()
-                    # for taxonomy collapsing,
-                    # metadata variable needs to be a complete list
-                    # not separate entries for each tax level
-                    for i in list(obs_data):
-                        tax = list()
-                        for j in list(obs_data[i]):
-                            tax.append(obs_data[i][j])
-                            obs_data[i].pop(j, None)
-                        obs_data[i]['taxonomy'] = tax
-                    biomtab.add_metadata(obs_data, axis='observation')
-                filestore[inputs['name'][i]] = biomtab
-                i += 1
-                j += 1
-        bioms = Batch(filestore, inputs)
-        # it is possible that there are forbidden characters in the OTU identifiers
-        # we can forbid people from using those, or replace those with an underscore
-        for name in bioms.otu:
-            biomfile = bioms.otu[name]
-            taxon_ids = biomfile._observation_ids  # need to be careful with these operations
-            taxon_index = biomfile._obs_index  # likely to corrupt BIOM file if done wrong
-            new_ids = deepcopy(taxon_ids)
-            new_indexes = deepcopy(taxon_index)
-            for i in range(0, len(taxon_ids)):
-                id = taxon_ids[i]
-                new_id = id.replace(" ", "_")
-                new_ids[i] = new_id
-                new_indexes[new_id] = new_indexes.pop(id)
-            biomfile._observation_ids = new_ids
-            biomfile._obs_index = new_indexes
-            bioms.otu[name] = biomfile
-        if inputs['cluster'] is not None:
-            pub.sendMessage('update', msg='Clustering BIOM files...')
-            bioms.cluster_biom()
-        if inputs['split'] is not None and inputs['split'] is not 'TRUE':
-            bioms.split_biom()
-        if inputs['min'] is not None:
-            pub.sendMessage('update', msg='Setting minimum mean abundance...')
-            bioms.prev_filter(mode='min')
-        if inputs['rar'] is not None:
-            pub.sendMessage('update', msg='Rarefying counts...')
-            bioms.rarefy()
-        if inputs['prev'] is not None:
-            pub.sendMessage('update', msg='Setting prevalence filter...')
-            bioms.prev_filter(mode='prev')
-        nets = Nets(bioms)
-        try:
-            logfile = open(resource_path("massoc.log"), 'r')
-            logtext = logfile.read()
-            logfile.close()
-            dump = open(inputs['fp'][0], 'w')
-            dump.write(logtext)
-            dump.close()
-        except Exception:
-            pass
-        pub.sendMessage('update', msg='Starting network inference. This may take some time!')
-        nets = run_parallel(nets)
-        nets.write_networks()
-        nets.write_bioms()
-        pub.sendMessage('update', msg="Finished running network inference!")
-        return nets
-    except Exception:
-        logger.error("Failed to run worker", exc_info=True)
+    get_input(inputs, publish=True)
+    run_network(inputs, publish=True)
+
 
 

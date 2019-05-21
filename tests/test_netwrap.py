@@ -16,7 +16,7 @@ from subprocess import call
 
 import biom
 from massoc.scripts.batch import Batch
-from massoc.scripts.netwrap import Nets
+from massoc.scripts.netwrap import Nets, run_spiec, run_spar, run_conet, run_jobs, get_joblist
 
 import massoc
 from massoc.scripts.main import run_parallel
@@ -24,8 +24,7 @@ from massoc.scripts.main import run_parallel
 random.seed(7)
 
 
-testloc = list()
-testloc.append((os.path.dirname(massoc.__file__)[:-7]).replace('\\', '/'))
+testloc = os.path.dirname(massoc.__file__)[:-7].replace('\\', '/')
 
 tabotu = '[[ 243  567  112   45   2]\n ' \
          '[ 235   56  788  232    1]\n ' \
@@ -128,7 +127,7 @@ ae", "g__Escherichia", "s__"]}}
     }
 """
 
-testbiom = {"test": biom.parse.parse_biom_table(testraw)}
+testbiom = {"otu": {"test": biom.parse.parse_biom_table(testraw)}}
 inputs = {'biom_file': None,
           'cluster': None,
           'otu_meta': None,
@@ -141,8 +140,8 @@ inputs = {'biom_file': None,
           'otu_table': None,
           'tools': ['spiec-easi'],
           'spiec': None,
-          'conet': [(os.path.dirname(massoc.__file__)[:-6] + 'tests\\CoNet3')],
-          'spar': [(os.path.dirname(massoc.__file__)[:-6] + 'tests\\SparCC')],
+          'conet': (os.path.dirname(massoc.__file__)[:-6] + 'tests\\CoNet3'),
+          'spar': (os.path.dirname(massoc.__file__)[:-6] + 'tests\\SparCC'),
           'spar_pval': None,
           'spar_boot': None,
           'levels': ['otu', 'order'],
@@ -161,33 +160,12 @@ for x in inputs['name']:
     filenames.append(netbatch.inputs['fp'][0] + '/' + x + '_class.hdf5')
     filenames.append(netbatch.inputs['fp'][0] + '/' + x + '_phylum.hdf5')
 
+
 class TestNetWrap(unittest.TestCase):
     """Tests netwrap.
     More specifically, checks ability to call network inference tools.
     Netwrap requires access to these tools, and they need to be installed.
     """
-
-    def test_spar(self):
-        """Check if the SparCC function call works
-        by testing length of Nets.networks."""
-        testnets = deepcopy(netbatch)
-        testnets.collapse_tax()
-        testnets.write_bioms()
-        testnets.run_spar(boots=10)
-        for name in filenames:
-            call(("rm " + name))
-        self.assertEqual(len(testnets.networks), 2)
-
-    def test_conet(self):
-        """Check if the CoNet function call works
-        by testing length of Nets.networks."""
-        testnets = deepcopy(netbatch)
-        testnets.collapse_tax()
-        testnets.write_bioms()
-        testnets.run_conet()
-        for name in filenames:
-            call(("rm " + name))
-        self.assertEqual(len(testnets.networks), 2)
 
     def test_spiec(self):
         """Check if the SPIEC-EASI function call works
@@ -195,10 +173,170 @@ class TestNetWrap(unittest.TestCase):
         testnets = deepcopy(netbatch)
         testnets.collapse_tax()
         testnets.write_bioms()
-        testnets.run_spiec()
+        filenames = testnets.get_filenames()
+        networks = run_spiec(filenames)
         for name in filenames:
-            call(("rm " + name))
-        self.assertEqual(len(testnets.networks), 2)
+            for y in filenames[name]:
+                call(("rm " + y))
+        self.assertEqual(len(networks), 2)
+
+    def test_spar(self):
+        """Check if the SparCC function call works
+        by testing length of Nets.networks."""
+        testnets = deepcopy(netbatch)
+        testnets.collapse_tax()
+        testnets.write_bioms()
+        testnets._prepare_spar()
+        filenames = testnets.get_filenames()
+        networks = run_spar(spar=inputs['spar'], filenames=filenames)
+        for name in filenames:
+            for y in filenames[name]:
+                call(("rm " + y))
+        self.assertEqual(len(networks), 2)
+
+    def test_conet(self):
+        """Check if the CoNet function call works
+        by testing length of Nets.networks."""
+        testnets = deepcopy(netbatch)
+        testnets.collapse_tax()
+        testnets.write_bioms()
+        testnets._prepare_conet()
+        orig_ids, obs_ids = netbatch._prepare_conet()
+        filenames = testnets.get_filenames()
+        network = run_conet(filenames=filenames, conet=inputs['conet'],
+                           orig_ids=orig_ids, obs_ids=obs_ids)
+        for name in filenames:
+            for file in filenames[name]:
+                call(("rm " + file))
+        self.assertEqual(len(network), 2)
+
+    def test_get_joblist(self):
+        """
+        Checks whether the joblist function
+        returns a joblist in the appropriate format:
+        list of dicts with each only 1 key.
+        """
+        inputs = {'biom_file': None,
+                  'cluster': None,
+                  'otu_meta': None,
+                  'prefix': None,
+                  'sample_data': None,
+                  'split': None,
+                  'tax_table': [(testloc + 'otu_tax.txt')],
+                  'fp': testloc,
+                  'otu_table': [(testloc + 'otu_otus.txt')],
+                  'tools': ['spiec-easi', 'conet'],
+                  'spiec': ['somefile.txt'],
+                  'conet': None,
+                  'spar_pval': None,
+                  'spar_boot': None,
+                  'levels': ['family', 'class'],
+                  'prev': ['20'],
+                  'name': ['test'],
+                  'cores': None}
+        batch = Batch(testbiom, inputs)
+        netbatch = Nets(batch)
+        jobs = get_joblist(netbatch)
+        filename = netbatch.inputs['fp'] + '/' + x + 'otu.hdf5'
+        call("rm " + filename)
+        filename = netbatch.inputs['fp'] + '/' + x + '_family.hdf5'
+        call("rm " + filename)
+        filename = netbatch.inputs['fp'] + '/' + x + '_class.hdf5'
+        call("rm " + filename)
+        filename = netbatch.inputs['fp'] + '/spiec-easi_family_test.txt'
+        call("rm " + filename)
+        self.assertEqual(len(jobs), 6)
+
+    def test_run_jobs(self):
+        """
+        Checks whether run_jobs really returns only 1 network.
+        """
+        inputs = {'biom_file': None,
+                  'cluster': None,
+                  'otu_meta': None,
+                  'prefix': None,
+                  'sample_data': None,
+                  'split': None,
+                  'tax_table': [(testloc[:-17] + 'otu_tax.txt')],
+                  'fp': testloc+'/data',
+                  'otu_table': [(testloc[:-17] + 'otu_otus.txt')],
+                  'tools': ['conet'],
+                  'conet_bash': None,
+                  'spiec': None,
+                  'conet': (os.path.dirname(massoc.__file__)[:-6] + 'tests\\CoNet3'),
+                  'spar_pval': None,
+                  'spar_boot': None,
+                  'levels': ['family'],
+                  'prev': ['20'],
+                  'name': ['test'],
+                  'cores': None,
+                  'min': ['10'],
+                  'spar': None}
+        batch = Batch(testbiom, inputs)
+        netbatch = Nets(batch)
+        jobs = get_joblist(netbatch)
+        netbatch.collapse_tax()
+        netbatch.write_bioms()
+        orig_ids, obs_ids = netbatch._prepare_conet()
+        filenames = netbatch.get_filenames()
+        network = run_jobs(spar=inputs['spar'], conet=inputs['conet'],
+                           orig_ids=orig_ids, obs_ids=obs_ids, job=jobs[0], filenames=filenames)
+        x = inputs['name'][0]
+        filename = netbatch.inputs['fp'] + '/' + x + '_species.hdf5'
+        call("rm " + filename)
+        filename = netbatch.inputs['fp'] + '/' + x + '_genus.hdf5'
+        call("rm " + filename)
+        filename = netbatch.inputs['fp'] + '/' + x + '_family.hdf5'
+        call("rm " + filename)
+        filename = netbatch.inputs['fp'] + '/' + x + '_order.hdf5'
+        call("rm " + filename)
+        filename = netbatch.inputs['fp'] + '/' + x + '_class.hdf5'
+        call("rm " + filename)
+        filename = netbatch.inputs['fp'] + '/' + x + '_phylum.hdf5'
+        call("rm " + filename)
+        call(("rm " + inputs['fp'] + '/' + inputs['tools'][0] + '_' + inputs['name'][0] + '_' + inputs['levels'][0] +'.hdf5'))
+        self.assertEqual(len(network), 1)
+
+    def test_run_parallel(self):
+        """Checks if the run_parallel function works without raising an error."""
+        inputs = {'biom_file': None,
+                  'cluster': None,
+                  'otu_meta': None,
+                  'prefix': None,
+                  'sample_data': None,
+                  'split': None,
+                  'tax_table': [(testloc[:-17] + 'otu_tax.txt')],
+                  'fp': testloc,
+                  'otu_table': [(testloc[:-17] + 'otu_otus.txt')],
+                  'tools': ['conet'],
+                  'spiec': None,
+                  'conet': (os.path.dirname(massoc.__file__)[:-6] + 'tests\\CoNet3'),  # cannot be used in general testing
+                  'conet_bash': None,
+                  'spar_pval': None,
+                  'spar_boot': None,
+                  'levels': ['family'],
+                  'prev': 20,
+                  'min': 10,
+                  'name': ['test'],
+                  'cores': None,
+                  'rar': None,
+                  'spar': None}
+        batch = Batch(testbiom, inputs)
+        batch.collapse_tax()
+        batch.inputs['procbioms'] = dict()
+        batch.inputs['procbioms']['family'] = dict()
+        batch.inputs['procbioms']['family']['test'] = 'C://Users//u0118219//Documents//massoc//test_family.hdf5'
+        netbatch = Nets(batch)
+        netbatch = run_parallel(netbatch)
+        filename = netbatch.inputs['fp'] + '/' + x + 'otu.hdf5'
+        call("rm " + filename)
+        filename = netbatch.inputs['fp'] + '/' + x + '_family.hdf5'
+        call("rm " + filename)
+        filename = netbatch.inputs['fp'] + '/conet_family_test.txt'
+        call("rm " + filename)
+        self.assertEqual(len(netbatch.networks), 1)
+
+
 
 if __name__ == '__main__':
     unittest.main()

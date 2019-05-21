@@ -18,7 +18,6 @@ from massoc.scripts.batch import Batch
 import networkx as nx
 from subprocess import Popen, PIPE
 from psutil import Process
-from massoc.scripts.main import run_neo4j
 
 testloc = list()
 testloc.append(os.path.dirname(massoc.__file__)[:-6])
@@ -242,10 +241,7 @@ inputs = {'biom_file': None,
           'levels': ['otu', 'order'],
           'prev': ['20'],
           'cores': ['4'],
-          'neo4j': os.path.dirname(massoc.__file__)[:-6] + 'tests\\neo4j',
-          'address': 'bolt://localhost:7687',
-          'username': 'neo4j',
-          'password': 'test'}
+          'neo4j': [(os.path.dirname(massoc.__file__)[:-6] + 'tests\\neo4j')]}
 networks = Nets(Batch(deepcopy(testbiom), inputs))
 g = nx.Graph()
 nodes = ["GG_OTU_1", "GG_OTU_2", "GG_OTU_3", "GG_OTU_4", "GG_OTU_5"]
@@ -267,18 +263,19 @@ f["GG_OTU_3"]["GG_OTU_4"]['weight'] = -1.0
 networks.networks['test_f'] = f
 
 # run database
-filepath= inputs['neo4j'] + '/bin/neo4j.bat console'
+filepath= inputs['neo4j'][0] + '/bin/neo4j.bat console'
 filepath = filepath.replace("\\", "/")
 p = Popen(filepath, shell=True, stdout = PIPE)
 
 from massoc.scripts.netbase import ImportDriver
-from massoc.scripts.netstats import NetDriver
+from massoc.scripts.metastats import MetaDriver
 
 drive = ImportDriver(user='neo4j', password='test', uri='bolt://localhost:7687')
 drive.clear_database()
 drive.convert_nets(networks, mode='weight')
 
-statdrive = NetDriver(user='neo4j', password='test', uri='bolt://localhost:7687')
+statdrive = MetaDriver(user='neo4j', password='test', uri='bolt://localhost:7687')
+
 
 class TestMain(unittest.TestCase):
     """"
@@ -288,30 +285,60 @@ class TestMain(unittest.TestCase):
     we should have a checked dataset with known outputs to make sure inference is run correctly.
     """
 
-    def test_get_union(self):
-        """There are two networks with 6 edges, but only 4 unique ones;
-        the union function should collect these. """
+    def test_get_pairlist(self):
+        """Checks if pairlists of similar associations are returned."""
         drive.clear_database()
         drive.convert_nets(networks, mode='weight')
-        union = statdrive.graph_union()
-        self.assertEqual(len(union), 4)
+        pairs = statdrive.get_pairlist(level='Genus', mode='weight')
+        name1 = pairs[0]['p'].nodes[0]
+        name2 = pairs[0]['r'].nodes[0]
+        self.assertEqual(name1, name2)
 
-    def test_get_intersection(self):
-        """There are two networks with 6 edges, but only 4 unique ones;
-        the intersection function should only collect the 3 present in both. """
+
+    # should test if network agglomeration also handles taxa that have not been assigned taxonomy
+
+    def test_associate_samples_spearman(self):
+        """Tests if associations between continuous sample variables and taxa are added.
+        The first OTU was adjusted to only occur in skin samples."""
         drive.clear_database()
         drive.convert_nets(networks, mode='weight')
-        intersection = statdrive.graph_intersection()
-        self.assertEqual(len(intersection), 2)
+        vars = ['BarcodeSequence',
+                'LinkerPrimerSequence',
+                'BODY_SITE',
+                'Description', 'pH']
+        for var in vars:
+            statdrive.associate_samples(label=var)
+        spear = drive.custom_query("MATCH (n:Taxon)-[r:SPEARMAN]-() RETURN n")
+        self.assertEqual(len(spear), 1)
 
-    def test_get_difference(self):
-        """When no networks are specified, only nodes that are present in 1 network are returned.
-        Otherwise, nodes specific to the specified network are returned."""
+    def test_associate_samples_hypergeom(self):
+        """Tests if associations between categorical sample variables and taxa are added.
+        The first OTU was adjusted to only occur in skin samples."""
         drive.clear_database()
         drive.convert_nets(networks, mode='weight')
-        difference = statdrive.graph_difference()
-        self.assertEqual(len(difference), 2)
+        vars = ['BarcodeSequence',
+                'LinkerPrimerSequence',
+                'BODY_SITE',
+                'Description', 'pH']
+        for var in vars:
+            statdrive.associate_samples(label=var)
+        hypergeom = drive.custom_query("MATCH p=(n:Taxon)-[r:HYPERGEOM]-() RETURN p")
+        self.assertEqual(len(hypergeom), 3)
 
+    def test_associate_pair(self):
+        """Tests if associations between sample variables and taxa are added for 1 taxon.
+        The first OTU was adjusted to only occur in skin samples."""
+        drive.clear_database()
+        drive.convert_nets(networks, mode='weight')
+        taxon = drive.custom_query("MATCH (n:Taxon {name: 'GG_OTU_1'}) RETURN n")[0]['n'].get('name')
+        vars = ['BarcodeSequence',
+                'LinkerPrimerSequence',
+                'BODY_SITE',
+                'Description', 'pH']
+        for var in vars:
+            statdrive.associate_samples(label=var)
+        hypergeom = drive.custom_query("MATCH p=(n:Taxon)-[r:HYPERGEOM]-() RETURN p")
+        self.assertEqual(len(hypergeom), 3)
 
 if __name__ == '__main__':
     unittest.main()

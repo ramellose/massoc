@@ -8,16 +8,12 @@ __email__ = 'lisa.rottjers@kuleuven.be'
 __status__ = 'Development'
 __license__ = 'Apache 2.0'
 
-import os
-
 import wx
 import wx.html
 import wx.lib.wxpTag
 from massoc.scripts.main import resource_path
-import massoc
 import webbrowser
-import logging
-import logging.handlers as handlers
+
 
 class IntroPanel(wx.Panel):
     def __init__(self, parent):
@@ -71,7 +67,7 @@ Currently, the following features are available:
 <li>More features are currently under construction.</li>
 </ul>
 <p>Welcome to <em><strong>massoc</strong></em>! <br /> Contact the author at lisa.rottjers (at) kuleuven.be, <br />or visit the <a href="https://github.com/ramellose/">repository</a>. Your feedback is much appreciated!</p>
-<p>Currently, you are using massoc 0.1. This version is still in early alpha. Encountering bugs is highly likely!</p>
+<p>Currently, you are using massoc 0.3.0. This version is still in early alpha. Encountering bugs is highly likely!</p>
 
 
 

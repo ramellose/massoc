@@ -19,10 +19,36 @@ from uuid import uuid4  # generates unique IDs for associations + observations
 import networkx as nx
 from massoc.scripts.netstats import _get_unique
 import re
+import numpy as np
 import logging
-import logging.handlers as handlers
-logger = logging.getLogger()
-logger.setLevel(logging.WARNING)
+import sys
+import os
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# handler to sys.stdout
+sh = logging.StreamHandler(sys.stdout)
+sh.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+sh.setFormatter(formatter)
+logger.addHandler(sh)
+import logging.handlers
+
+# handler to file
+# only handler with 'w' mode, rest is 'a'
+# once this handler is started, the file writing is cleared
+# other handlers append to the file
+logpath = "\\".join(os.getcwd().split("\\")[:-1]) + '\\massoc.log'
+# filelog path is one folder above massoc
+# pyinstaller creates a temporary folder, so log would be deleted
+fh = logging.handlers.RotatingFileHandler (maxBytes=500,
+                                      filename=logpath, mode='a')
+fh.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+logger.addHandler(fh)
+
 
 class ImportDriver(object):
 
@@ -39,17 +65,23 @@ class ImportDriver(object):
             with self._driver.session() as session:
                 session.write_transaction(self._delete_all)
         except Exception:
-            logger.error("Could not clear database.", exc_info=True)
+            logger.error("Could not clear database. \n", exc_info=True)
 
     def custom_query(self, query):
         """Accepts a query and provides the results."""
         try:
             with self._driver.session() as session:
                 output = session.read_transaction(self._query, query)
-            return(output)
+            return output
         except Exception:
-            logger.error("Unable to execute query: " + query, exc_info=True)
+            logger.error("Unable to execute query: " + query + '\n', exc_info=True)
 
+    def add_data(self, filename):
+        """
+        Given a filename of an edge list
+        :param filename:
+        :return:
+        """
 
     def convert_nets(self, nets, mode=None):
         """
@@ -64,9 +96,9 @@ class ImportDriver(object):
                 with self._driver.session() as session:
                     for net in nets.networks:
                         self.convert_networkx(network=nets.networks[net],
-                                              network_id=net, mode='weight', exp_id=exp_id, log=nets.log)
+                                              network_id=net, mode='weight', exp_id=exp_id)
         except Exception:
-            logger.error("Could not port network object to database. ", exc_info=True)
+            logger.error("Could not port network object to database. \n", exc_info=True)
 
     def convert_networkx(self, network_id, network, exp_id=None, log=None, mode=None):
         try:
@@ -74,7 +106,7 @@ class ImportDriver(object):
                 session.write_transaction(self._create_network, network_id, exp_id, log)
                 session.write_transaction(self._create_associations, network_id, network, mode)
         except Exception:
-            logger.error("Could not write networkx object to database. ", exc_info=True)
+            logger.error("Could not write networkx object to database. \n", exc_info=True)
 
     def convert_biom(self, biomfile, exp_id):
         """
@@ -85,13 +117,63 @@ class ImportDriver(object):
                 session.write_transaction(self._create_experiment, exp_id)
                 for taxon in biomfile.ids(axis='observation'):
                     session.write_transaction(self._create_taxon, taxon, biomfile)
+                    tax_index = biomfile.index(axis='observation', id=taxon)
+                    meta = biomfile.metadata(axis='observation')[tax_index]
+                    for key in meta:
+                        if key != 'taxonomy' and type(meta[key]) == str:
+                            session.write_transaction(self._create_property,
+                                                      source=taxon, sourcetype='Taxon',
+                                                      target=meta[key], name=key)
                 for sample in biomfile.ids(axis='sample'):
                     session.write_transaction(self._create_sample, sample, exp_id, biomfile)
-                session.write_transaction(self._create_observations, biomfile)
+                    sample_index = biomfile.index(axis='sample', id=sample)
+                    meta = biomfile.metadata(axis='sample')[sample_index]
+                    # need to clean up these 'if' conditions to catch None properties
+                    # there is also a problem with commas + quotation marks here
+                    for key in meta:
+                        # meta[key] = re.sub(r'\W+', '', str(meta[key]))
+                        session.write_transaction(self._create_property,
+                                                  source=sample, sourcetype='Sample',
+                                                  target=meta[key], name=key)
+            obs_data = biomfile.to_dataframe()
+            rows, cols = np.where(obs_data.values != 0)
+            observations = list()
+            for taxon, sample in list(zip(obs_data.index[rows], obs_data.columns[cols])):
+                value = obs_data[sample][taxon]
+                observations.append((taxon, sample, value))
+            with self._driver.session() as session:
+                for observation in observations:
+                    session.write_transaction(self._create_observations, observation)
         except Exception:
-            logger.error("Could not write BIOM file to database. ", exc_info=True)
+            logger.error("Could not write BIOM file to database. \n", exc_info=True)
 
-    def export_network(self, path, pairlist=None, mode='basic'):
+    def include_nodes(self, nodes, name, label):
+        """
+        Given a named dictionary, this function tries to upload
+        the file to the Neo4j database.
+        The first column of the edgelist should reflect nodes
+        already present in the Neo4j graph database,
+        while the second column reflects node names that will be added.
+        The column names are used to assign node types to the new metadata.
+        :param nodes: Dictionary of existing nodes as values with node names as keys
+        :param label: Label of source node (e.g. Taxon, Sample, Property, Experiment etc)
+        :param name: Name of variable, inserted in Neo4j graph database as type
+        :return:
+        """
+        # first step:
+        # check whether key values in node dictionary exist in network
+        with self._driver.session() as session:
+            matches = session.read_transaction(self._find_nodes, list(nodes.keys()))
+            if not matches:
+                logger.warning('No source nodes are present in the network. \n')
+                exit(1)
+        with self._driver.session() as session:
+            for node in nodes:
+                session.write_transaction(self._create_property,
+                                          source=node, sourcetype=label,
+                                          target=nodes[node], name=name)
+
+    def export_network(self, path, pairlist=None):
         # mode = sample removed
         try:
             g = nx.MultiGraph()
@@ -105,7 +187,7 @@ class ImportDriver(object):
                 g.add_node(str(i), name=taxon_list[i])
             edge_list = pairlist
             # the pairlist is given by the graph_union funcs etc
-            if not pairlist:
+            if pairlist is None:
                 with self._driver.session() as session:
                     edge_list = session.read_transaction(self._association_list)
             for i in range(len(edge_list)):
@@ -131,7 +213,7 @@ class ImportDriver(object):
                 new_tax_dict[item] = new_dict
                 nx.set_node_attributes(g, new_tax_dict[item], item)
             with self._driver.session() as session:
-                tax_properties = session.read_transaction(self._tax_properties, mode='TaxonProperty')
+                tax_properties = session.read_transaction(self._tax_properties)
             attribute_dict = dict()
             attrlist = list()
             for item in tax_properties:
@@ -150,34 +232,10 @@ class ImportDriver(object):
                     attribute_dict[type][taxon] = str(attributes[type])
             for item in attribute_dict:
                 nx.set_node_attributes(g, attribute_dict[item], item)
-            if mode != 'sample':  # currently no other modes available; sample mode was removed
-                with self._driver.session() as session:
-                    sample_properties = session.read_transaction(self._tax_properties, mode='SampleProperty')
-                attribute_dict = dict()
-                attrlist = list()
-                for item in sample_properties:
-                    taxon = taxon_dict[item]
-                    attributes = sample_properties[item]
-                    attrlist.extend(list(attributes.keys()))
-                attrlist = set(attrlist)
-                for type in attrlist:
-                    attribute_dict[type] = dict()
-                    for taxon in taxon_dict:
-                        attribute_dict[type][taxon_dict[taxon]] = 'None'
-                for item in sample_properties:
-                    taxon = taxon_dict[item]
-                    attributes = sample_properties[item]
-                    for type in attributes:
-                        attribute_dict[type][taxon] = str(attributes[type])
-                for item in attribute_dict:
-                    if item is None:
-                        nx.set_node_attributes(g, str(attribute_dict[item]), 'Sample_variables')
-                    else:
-                        nx.set_node_attributes(g, attribute_dict[item], item)
             g = g.to_undirected()
             nx.write_graphml(g, path)
         except Exception:
-            logger.error("Could not write database graph to GraphML file. ", exc_info=True)
+            logger.error("Could not write database graph to GraphML file. \n", exc_info=True)
 
     def create_association_relationships(self):
         """For each association, a link is created from 1 taxon to another,
@@ -188,7 +246,7 @@ class ImportDriver(object):
                 network = session.write_transaction(self._create_rel_assoc)
             return network
         except Exception:
-            logger.error("Could not create association shortcuts. ", exc_info=True)
+            logger.error("Could not create association shortcuts. \n", exc_info=True)
 
 
     @staticmethod
@@ -234,34 +292,17 @@ class ImportDriver(object):
         # first check if OTU already exists
         hit = tx.run(("MATCH (a:Taxon {name: '" + taxon +
                       "'}) RETURN a")).data()
-        if len(hit)==0:
+        if len(hit) == 0:
             tx.run("CREATE (a:Taxon) SET a.name = $id", id=taxon)
             tax_index = biomfile.index(axis='observation', id=taxon)
             tax_dict = biomfile.metadata(axis='observation')[tax_index]['taxonomy']
             tax_levels = ['Kingdom', 'Phylum', 'Class',
                           'Order', 'Family', 'Genus', 'Species']
-            rel_list = ['IS_KINGDOM', 'IS_PHYLUM', 'IS_CLASS',
-                        'IS_ORDER', 'IS_FAMILY', 'IS_GENUS', 'IS_SPECIES']
-            tree_list = ['PART_OF_KINGDOM', 'PART_OF_PHYLUM', 'PART_OF_CLASS',
-                        'PART_OF_ORDER', 'PART_OF_FAMILY', 'PART_OF_GENUS']
+            # rel_list = ['IS_KINGDOM', 'IS_PHYLUM', 'IS_CLASS',
+            #             'IS_ORDER', 'IS_FAMILY', 'IS_GENUS', 'IS_SPECIES']
+            # tree_list = ['PART_OF_KINGDOM', 'PART_OF_PHYLUM', 'PART_OF_CLASS',
+            #             'PART_OF_ORDER', 'PART_OF_FAMILY', 'PART_OF_GENUS']
             if str(taxon) is not 'Bin':
-                meta = biomfile.metadata(axis='observation')[tax_index]
-                for key in meta:
-                    if key != 'taxonomy' and type(meta[key]) == str:
-                        hit = tx.run(("MATCH (a:TaxonProperty) WHERE a.name = '" +
-                                      meta[key] + "' AND a.type = '" +
-                                      key + "' RETURN a")).data()
-                        if len(hit) == 0:
-                            if key and meta[key]:
-                                tx.run("CREATE (a:TaxonProperty) "
-                                       "SET a.name = $value AND a.type = $type "
-                                       "RETURN a", value=meta[key], type=key).data()
-                        if key and meta[key]:
-                            tx.run(("MATCH (a:Taxon), (b:TaxonProperty) "
-                                    "WHERE a.name = '" + taxon +
-                                    "' AND b.name = '" + meta[key] +
-                                    "' CREATE (a)-[r:HAS_PROPERTY]->(b) "
-                                    "RETURN type(r)"))
                 # define range for which taxonomy needs to be added
                 j = 0
                 if tax_dict:
@@ -280,14 +321,14 @@ class ImportDriver(object):
                             if len(hit) == 0:
                                 tx.run(("CREATE (a:" + tax_levels[i] +
                                         " {name: '" + tax_dict[i] +
-                                        "'}) RETURN a")).data()
+                                        "', type: 'Taxonomy'}) RETURN a")).data()
                                 if i > 0:
                                     tx.run(("MATCH (a:" + tax_levels[i] +
                                             "), (b:" + tax_levels[i-1] +
                                             ") WHERE a.name = '" + tax_dict[i] +
                                             "' AND b.name = '" + tax_dict[i-1] +
-                                            "' CREATE (a)-[r:" + tree_list[i-1] +
-                                            "]->(b) RETURN type(r)"))
+                                            "' CREATE (a)-[r: PART_OF]->(b) "
+                                            "RETURN type(r)"))
                             hit = tx.run(("MATCH (a:Taxon)-[r]-(b:" + tax_levels[i] +
                                     ") WHERE a.name = '" + taxon +
                                     "' AND b.name = '" + tax_dict[i] +
@@ -296,8 +337,8 @@ class ImportDriver(object):
                                 tx.run(("MATCH (a:Taxon), (b:" + tax_levels[i] +
                                         ") WHERE a.name = '" + taxon +
                                         "' AND b.name = '" + tax_dict[i] +
-                                        "' CREATE (a)-[r:" + rel_list[i] +
-                                        "]->(b) RETURN type(r)"))
+                                        "' CREATE (a)-[r: BELONGS_TO]->(b) "
+                                        "RETURN type(r)"))
             else:
                 tx.run("CREATE (a:Taxon) SET a.name = $id", id='Bin')
 
@@ -310,46 +351,54 @@ class ImportDriver(object):
                 "' AND b.name = '" + exp_id +
                 "' CREATE (a)-[r:IN_EXPERIMENT]->(b) "
                 "RETURN type(r)"))
-        sample_index = biomfile.index(axis='sample', id=sample)
-        meta = biomfile.metadata(axis='sample')[sample_index]
-        # need to clean up these 'if' conditions to catch None properties
-        # there is also a problem with commas + quotation marks here
-        for key in meta:
-            meta[key] = re.sub(r'\W+', '', str(meta[key]))
-            hit = tx.run(("MATCH (a:SampleProperty) WHERE a.name = '" +
-                          meta[key] + "' AND a.type = '" +
-                          key + "' RETURN a")).data()
-            if len(hit) == 0:
-                if key and meta[key]:
-                    tx.run(("CREATE (a:SampleProperty) "
-                           "SET a.name = '" + meta[key] +
-                           "' SET a.type = '" + key + "' "
-                           "RETURN a")).data()
-            if key and meta[key]:
-                tx.run(("MATCH (a:Sample), (b:SampleProperty) "
-                        "WHERE a.name = '" + sample +
-                        "' AND b.name = '" + meta[key] +
-                        "' AND b.type = '" + key +
-                        "' CREATE (a)-[r:HAS_SAMPLE_PROPERTY]->(b) "
-                        "RETURN type(r)"))
 
     @staticmethod
-    def _create_observations(tx, biomfile):
+    def _create_property(tx, source, target, name, sourcetype=''):
+        """
+        Creates target node if it does not exist yet
+        and adds the relationship between target and source.
+        :param tx: Transaction
+        :param source: Source node, should exist in database
+        :param target: Target node
+        :param name: Type variable of target node
+        :param sourcetype: Type variable of source node (not required)
+        :return:
+        """
+        hit = tx.run(("MATCH (a:Property) WHERE a.name = '" +
+                      target + "' AND a.type = '" +
+                      name + "' RETURN a")).data()
+        if len(hit) == 0:
+            tx.run(("CREATE (a:Property) "
+                    "SET a.name = '" + target +
+                    "' SET a.type = '" + name + "' "
+                                                "RETURN a")).data()
+        if len(sourcetype) > 0:
+            sourcetype = ':' + sourcetype
+        matching_rel = tx.run(("MATCH (a" + sourcetype + ")-[r:HAS_PROPERTY]-(b:Property) "
+                "WHERE a.name = '" + source +
+                "' AND b.name = '" + target +
+                "' AND b.type = '" + name +
+                "' RETURN r")).data()
+        if len(matching_rel) == 0:
+            tx.run(("MATCH (a" + sourcetype + "), (b:Property) "
+                    "WHERE a.name = '" + source +
+                    "' AND b.name = '" + target +
+                    "' AND b.type = '" + name +
+                    "' CREATE (a)-[r:HAS_PROPERTY]->(b) "
+                    "RETURN type(r)"))
+
+
+    @staticmethod
+    def _create_observations(tx, observation):
         """Creates relationships between taxa and samples
         that represent the count number of that taxon in a sample."""
-        obs_data = biomfile.to_dataframe()
-        for sample in biomfile.ids(axis='sample'):
-            values = obs_data[sample]
-            for taxon in biomfile.ids(axis='observation'):
-                value = values[taxon]
-                #  only add non-zero entries
-                if value > 0 and taxon is not 'Bin':
-                    tx.run(("MATCH (a:Taxon), (b:Sample) "
-                            "WHERE a.name = '" + taxon +
-                            "' AND b.name = '" + sample +
-                            "' CREATE (a)-[r:FOUND_IN]->(b) "
-                            "SET r.count = '" + str(value) +
-                            "' RETURN type(r)"))
+        taxon, sample, value = observation
+        tx.run(("MATCH (a:Taxon), (b:Sample) "
+                "WHERE a.name = '" + taxon +
+                "' AND b.name = '" + sample +
+                "' CREATE (a)-[r:FOUND_IN]->(b) "
+                "SET r.count = '" + str(value) +
+                "' RETURN type(r)"))
 
     @staticmethod
     def _create_network(tx, network, exp_id=None, log=None):
@@ -412,14 +461,14 @@ class ImportDriver(object):
                     feature = True
                     # find if TaxonProperty already exists
                     # otherwise, create it and link to Taxon
-                    hit = tx.run(("MATCH (a:TaxonProperty) WHERE a.type = '" +
+                    hit = tx.run(("MATCH (a:Property) WHERE a.type = '" +
                                   taxon1 + "' AND a.name = '" +
                                   attr['interactionType'] + "' RETURN a")).data()
                     if len(hit) == 0:
-                        tx.run(("CREATE (a:TaxonProperty) SET a.type = '" +
+                        tx.run(("CREATE (a:Property) SET a.type = '" +
                                       taxon1 + "' SET a.name = '" +
                                       attr['interactionType'] + "'"))
-                    tx.run(("MATCH (a:Taxon), (b:TaxonProperty) WHERE a.name = '" + taxon2 +
+                    tx.run(("MATCH (a:Taxon), (b:Property) WHERE a.name = '" + taxon2 +
                             "' AND b.type ='" + taxon1 +
                             "' AND b.name = '" + attr['interactionType'] +
                             "' CREATE (a)-[r:HAS_PROPERTY]->(b) RETURN type(r)"))
@@ -427,14 +476,14 @@ class ImportDriver(object):
                     feature = True
                     # find if TaxonProperty already exists
                     # otherwise, create it and link to Taxon
-                    hit = tx.run(("MATCH (a:TaxonProperty) WHERE a.type = '" +
+                    hit = tx.run(("MATCH (a:Property) WHERE a.type = '" +
                                   taxon2 + "' AND a.name = '" +
                                   attr['interactionType'] + "' RETURN a")).data()
                     if len(hit) == 0:
-                        tx.run(("CREATE (a:TaxonProperty) SET a.type = '" +
+                        tx.run(("CREATE (a:Property) SET a.type = '" +
                                       taxon2 + "' SET a.name = '" +
                                       attr['interactionType'] + "'"))
-                    tx.run(("MATCH (a:Taxon), (b:TaxonProperty) WHERE a.name = '" + taxon1 +
+                    tx.run(("MATCH (a:Taxon), (b:Property) WHERE a.name = '" + taxon1 +
                             "' AND b.type ='" + taxon2 +
                             "' AND b.name = '" + attr['interactionType'] +
                             "' CREATE (a)-[r:HAS_PROPERTY]->(b) RETURN type(r)"))
@@ -540,7 +589,7 @@ class ImportDriver(object):
         edge_list = list()
         for node in tax_nodes:
             samples = tx.run(("MATCH (:Taxon {name: '" + node +
-                              "'})-[r]-(n:SampleProperty) RETURN n, r"))
+                              "'})-[r:Sample]-(n:Property) RETURN n, r"))
             for sample in samples:
                 sublist = list()
                 sublist.append(node)
@@ -568,6 +617,20 @@ class ImportDriver(object):
         return edge_list
 
     @staticmethod
+    def _find_nodes(tx, names):
+        """Returns True if all nodes in the 'names' list are found in the database."""
+        for name in names:
+            netname = tx.run("MATCH (n {name: '" + name +
+                             "'}) RETURN n").data()
+            # only checking node name; should be unique in database!
+            found = True
+            if len(netname) == 0:
+                found = False
+            elif len(netname) > 1:
+                logger.warning("Duplicated node name in database! \n")
+        return found
+
+    @staticmethod
     def _tax_dict(tx):
         """Returns a dictionary of taxonomic values for each node. """
         taxa = tx.run("MATCH (n)--(:Association) WHERE n:Taxon OR n:Agglom_Taxon RETURN n").data()
@@ -588,14 +651,14 @@ class ImportDriver(object):
         return tax_dict
 
     @staticmethod
-    def _tax_properties(tx, mode='TaxonProperty'):
+    def _tax_properties(tx):
         """Returns a dictionary of taxon / sample properties, to be included as taxon metadata."""
         taxa = tx.run("MATCH (n)--(:Association) WHERE n:Taxon OR n:Agglom_Taxon RETURN n").data()
         taxa = _get_unique(taxa, 'n')
         properties = dict()
         for taxon in taxa:
             properties[taxon] = dict()
-            hits = tx.run("MATCH (n:" + mode + ")--(b {name: '" + taxon +
+            hits = tx.run("MATCH (n:Property)--(b {name: '" + taxon +
                           "'}) WHERE b:Taxon OR b:Agglom_Taxon RETURN n").data()
             if hits:
                 for hit in hits:
@@ -604,6 +667,13 @@ class ImportDriver(object):
                     properties[taxon][hit['n'].get('type')].append(hit['n'].get('name'))
             for property in properties[taxon]:
                 properties[taxon][property] = list(set(properties[taxon][property]))
+                if len(properties[taxon][property]) == 1:
+                    properties[taxon][property] = properties[taxon][property][0]
+                    # tries exporting property as float instead of list
+                    try:
+                        properties[taxon][property] = np.round(float(properties[taxon][property]), 4)
+                    except ValueError:
+                        pass
         clean_properties = dict()
         for taxon in properties:
             if len(properties[taxon]) != 0:

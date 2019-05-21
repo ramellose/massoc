@@ -13,10 +13,12 @@ import biom
 from copy import deepcopy
 import os
 import massoc
+from massoc.scripts.netbase import ImportDriver
 from massoc.scripts.netwrap import Nets
 from massoc.scripts.batch import Batch
 import networkx as nx
 from subprocess import Popen, PIPE
+from psutil import Process
 
 testloc = list()
 testloc.append(os.path.dirname(massoc.__file__)[:-6])
@@ -122,7 +124,14 @@ ae", "g__Escherichia", "s__"]}}
     }
 """
 
-testbiom = {"test": biom.parse.parse_biom_table(testraw)}
+metaraw = {"Sample1": "Test1",
+           "Sample2": "Test1",
+           "Sample3": "Test2",
+           "Sample4": "Test2",
+           "Sample5": "Test3",
+           "Sample6": "Test3"}
+
+testbiom = {"otu": {'test': biom.parse.parse_biom_table(testraw)}}
 inputs = {'biom_file': None,
           'cluster': None,
           'otu_meta': None,
@@ -158,9 +167,6 @@ networks.networks['test_network'] = g
 filepath= inputs['neo4j'][0] + '/bin/neo4j.bat console'
 filepath = filepath.replace("\\", "/")
 p = Popen(filepath, shell=True, stdout = PIPE)
-
-from massoc.scripts.netbase import ImportDriver
-from massoc.scripts.netstats import Driver
 
 drive = ImportDriver(user='neo4j', password='test', uri='bolt://localhost:7687')
 drive.clear_database()
@@ -198,15 +204,27 @@ class TestMain(unittest.TestCase):
         network = drive.custom_query(query=("MATCH (n:Network) RETURN n"))
         self.assertEqual(len(network), 1)
 
-    def convert_biom(self):
+    def test_convert_biom(self):
         """BIOM files can be added to the database."""
         drive.clear_database()
-        drive.convert_biom(testbiom['test'], 'test_biomfile')
+        drive.convert_biom(testbiom['otu']['test'], 'test_biomfile')
         exp_id = drive.custom_query(query=("MATCH (n:Experiment {name: 'test_biomfile'}) RETURN n"))
         self.assertEqual(len(exp_id), 1)
 
+    def test_include_nodes(self):
+        """Given a list of parsed files, this function tries to add them to the database."""
+        # need to mock the metaraw thing here
+        drive.convert_biom(testbiom['otu']['test'], 'test_biomfile')
+        drive.include_nodes(metaraw, name='Participant', label='Sample')
+        node_id = drive.custom_query(query=("MATCH (n:Property {name: 'Test1'}) RETURN n"))
+        self.assertGreater(len(node_id), 0)
 
 
 
 if __name__ == '__main__':
     unittest.main()
+    parent_pid = p.pid
+    parent = Process(parent_pid)
+    children = parent.children(recursive=True)
+    for child in children:
+        child.kill()
