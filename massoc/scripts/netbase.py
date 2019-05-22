@@ -113,28 +113,33 @@ class ImportDriver(object):
         Stores a BIOM object in the database.
         """
         try:
+            # first check if sample metadata exists
+            tax_meta = biomfile.metadata(axis='observation')
+            sample_meta = biomfile.metadata(axis='sample')
             with self._driver.session() as session:
                 session.write_transaction(self._create_experiment, exp_id)
                 for taxon in biomfile.ids(axis='observation'):
                     session.write_transaction(self._create_taxon, taxon, biomfile)
                     tax_index = biomfile.index(axis='observation', id=taxon)
-                    meta = biomfile.metadata(axis='observation')[tax_index]
-                    for key in meta:
-                        if key != 'taxonomy' and type(meta[key]) == str:
-                            session.write_transaction(self._create_property,
-                                                      source=taxon, sourcetype='Taxon',
-                                                      target=meta[key], name=key)
+                    if tax_meta:
+                        meta = biomfile.metadata(axis='observation')[tax_index]
+                        for key in meta:
+                            if key != 'taxonomy' and type(meta[key]) == str:
+                                session.write_transaction(self._create_property,
+                                                          source=taxon, sourcetype='Taxon',
+                                                          target=meta[key], name=key)
                 for sample in biomfile.ids(axis='sample'):
                     session.write_transaction(self._create_sample, sample, exp_id, biomfile)
                     sample_index = biomfile.index(axis='sample', id=sample)
-                    meta = biomfile.metadata(axis='sample')[sample_index]
-                    # need to clean up these 'if' conditions to catch None properties
-                    # there is also a problem with commas + quotation marks here
-                    for key in meta:
-                        # meta[key] = re.sub(r'\W+', '', str(meta[key]))
-                        session.write_transaction(self._create_property,
-                                                  source=sample, sourcetype='Sample',
-                                                  target=meta[key], name=key)
+                    if sample_meta:
+                        meta = biomfile.metadata(axis='sample')[sample_index]
+                        # need to clean up these 'if' conditions to catch None properties
+                        # there is also a problem with commas + quotation marks here
+                        for key in meta:
+                            # meta[key] = re.sub(r'\W+', '', str(meta[key]))
+                            session.write_transaction(self._create_property,
+                                                      source=sample, sourcetype='Sample',
+                                                      target=meta[key], name=key)
             obs_data = biomfile.to_dataframe()
             rows, cols = np.where(obs_data.values != 0)
             observations = list()

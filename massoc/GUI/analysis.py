@@ -11,7 +11,7 @@ __license__ = 'Apache 2.0'
 from threading import Thread
 import wx
 from wx.lib.pubsub import pub
-from run_massoc import run_netstats, run_metastats
+from massoc.scripts.main import run_netstats, run_metastats
 from massoc.scripts.netbase import ImportDriver
 from time import sleep
 from copy import deepcopy

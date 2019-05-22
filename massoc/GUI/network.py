@@ -14,7 +14,7 @@ from threading import Thread
 import wx
 from wx.lib.pubsub import pub
 import massoc
-from run_massoc import run_network, get_input
+from massoc.scripts.main import run_network, get_input
 from massoc.scripts.batch import read_settings
 from time import sleep
 import sys

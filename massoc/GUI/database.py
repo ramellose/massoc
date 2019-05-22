@@ -10,7 +10,7 @@ __license__ = 'Apache 2.0'
 from threading import Thread
 import wx
 from wx.lib.pubsub import pub
-from run_massoc import run_neo4j
+from massoc.scripts.main import run_neo4j
 import webbrowser
 from biom import load_table
 import networkx as nx

@@ -14,7 +14,7 @@ from wx.lib.pubsub import pub
 import biom
 from biom.parse import MetadataMap
 from biom.exception import BiomParseException
-from massoc.run_massoc import get_input
+from massoc.scripts.main import get_input
 from massoc.scripts.batch import read_settings, write_settings
 import sys
 import logging

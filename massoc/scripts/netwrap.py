@@ -340,6 +340,7 @@ def run_conet(filenames, conet, orig_ids, obs_ids, settings=None):
             call("rm " + graphname, shell=True)
     return results
 
+
 def run_spiec(filenames, settings=None):
     """
     Runs a R executable containing settings for SPIEC-EASI network inference.
@@ -371,6 +372,7 @@ def run_spiec(filenames, settings=None):
             results[("spiec-easi_" + x + "_" + y)] = net
             call("rm " + graphname, shell=True)
     return results
+
 
 def run_spar(filenames, spar, boots=100, pval_threshold=0.001):
     """
