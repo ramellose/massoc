@@ -49,7 +49,7 @@ import pandas
 import sys
 from copy import deepcopy
 from massoc.scripts.batch import Batch
-import logging
+from massoc.scripts.batch import create_logger
 import multiprocessing as mp
 from functools import partial
 from subprocess import call
@@ -65,20 +65,6 @@ sh.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 sh.setFormatter(formatter)
 logger.addHandler(sh)
-
-# handler to file
-# only handler with 'w' mode, rest is 'a'
-# once this handler is started, the file writing is cleared
-# other handlers append to the file
-logpath = "\\".join(os.getcwd().split("\\")[:-1]) + '\\massoc.log'
-# filelog path is one folder above massoc
-# pyinstaller creates a temporary folder, so log would be deleted
-fh = logging.handlers.RotatingFileHandler (maxBytes=500,
-                                      filename=logpath, mode='a')
-fh.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-fh.setFormatter(formatter)
-logger.addHandler(fh)
 
 
 class Nets(Batch):
@@ -130,6 +116,7 @@ class Nets(Batch):
             self.otu = otu
         self.networks = dict()
         self.names = list(self.otu)
+        create_logger(self.inputs['fp'])
         if type(self.otu) is not dict:
             logger.error("Please supply a dictionary of biom files. ", exc_info=True)
             raise ValueError("Please supply a dictionary of biom files.")

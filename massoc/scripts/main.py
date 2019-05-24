@@ -21,7 +21,7 @@ import sys
 import os
 from biom import load_table
 from biom.parse import MetadataMap
-from massoc.scripts.batch import Batch, write_settings, read_settings, read_bioms
+from massoc.scripts.batch import Batch, write_settings, read_settings, read_bioms, create_logger
 from massoc.scripts.netwrap import Nets, run_parallel
 from copy import deepcopy
 from platform import system
@@ -46,20 +46,6 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 sh.setFormatter(formatter)
 logger.addHandler(sh)
 
-# handler to file
-# only handler with 'w' mode, rest is 'a'
-# once this handler is started, the file writing is cleared
-# other handlers append to the file
-logpath = "\\".join(os.getcwd().split("\\")[:-1]) + '\\massoc.log'
-# filelog path is one folder above massoc
-# pyinstaller creates a temporary folder, so log would be deleted
-fh = logging.handlers.RotatingFileHandler (maxBytes=500,
-                                      filename=logpath, mode='a')
-fh.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-fh.setFormatter(formatter)
-logger.addHandler(fh)
-
 
 def get_input(inputs, publish=False):
     """
@@ -76,6 +62,9 @@ def get_input(inputs, publish=False):
     All files are written to BIOM files, while a settings file is also written to disk
     for use by other massoc commands.
     """
+    # handler to file
+    # construct logger after filepath is provided
+    create_logger(inputs['fp'])
     if inputs['biom_file'] is not None:
         logger.info('BIOM file(s) to process: ' + ", ".join(inputs['biom_file']))
     if inputs['otu_table'] is not None:
@@ -96,7 +85,7 @@ def get_input(inputs, publish=False):
     if inputs['biom_file'] is None:
         if inputs['otu_table'] is None:
             logger.error("Please supply either a biom file "
-                             "or a tab-delimited OTU table!", exc_info=True)
+                         "or a tab-delimited OTU table!", exc_info=True)
             raise ValueError("Please supply either a biom file "
                              "or a tab-delimited OTU table!")
     i = 0
@@ -213,7 +202,10 @@ def run_network(inputs, publish=False):
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
     old_inputs.update(inputs)
     inputs = old_inputs
+    # handler to file
+    create_logger(inputs['fp'])
     filestore = read_bioms(inputs['procbioms'])
+    print(inputs)
     bioms = Batch(filestore, inputs)
     bioms = Nets(bioms)
     if inputs['tools'] is not None:
@@ -243,6 +235,8 @@ def run_network(inputs, publish=False):
 def run_neo4j(inputs, publish=False):
     # overwritten settings should be retained
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
+    # handler to file
+    create_logger(inputs['fp'])
     # check if password etc is already there
     if 'username' in old_inputs:
         logins = dict((k, old_inputs[k]) for k in ('username', 'password', 'address', 'neo4j'))
@@ -395,6 +389,8 @@ def run_netstats(inputs, publish=False):
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
     old_inputs.update(inputs)
     inputs = old_inputs
+    # handler to file
+    create_logger(inputs['fp'])
     checks = str()
     try:
         if publish:
@@ -452,14 +448,17 @@ def run_metastats(inputs, publish=False):
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
     old_inputs.update(inputs)
     inputs = old_inputs
+    # handler to file
+    create_logger(inputs['fp'])
     checks = str()
     try:
         if publish:
             pub.sendMessage('update', msg='Starting database drivers.')
         # sys.stdout.write('Starting database drivers.')
         metadriver = MetaDriver(user=inputs['username'],
-                              password=inputs['password'],
-                              uri=inputs['address'])
+                                password=inputs['password'],
+                                uri=inputs['address'],
+                                filepath=inputs['filepath'])
     except Exception:
         logger.warning("Failed to start database worker.  ", exc_info=True)
     try:

@@ -18,11 +18,10 @@ from neo4j.v1 import GraphDatabase
 from uuid import uuid4  # generates unique IDs for associations + observations
 import networkx as nx
 from massoc.scripts.netstats import _get_unique
-import re
+from massoc.scripts.batch import create_logger
 import numpy as np
 import logging
 import sys
-import os
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -35,25 +34,12 @@ sh.setFormatter(formatter)
 logger.addHandler(sh)
 import logging.handlers
 
-# handler to file
-# only handler with 'w' mode, rest is 'a'
-# once this handler is started, the file writing is cleared
-# other handlers append to the file
-logpath = "\\".join(os.getcwd().split("\\")[:-1]) + '\\massoc.log'
-# filelog path is one folder above massoc
-# pyinstaller creates a temporary folder, so log would be deleted
-fh = logging.handlers.RotatingFileHandler (maxBytes=500,
-                                      filename=logpath, mode='a')
-fh.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-fh.setFormatter(formatter)
-logger.addHandler(fh)
-
 
 class ImportDriver(object):
 
-    def __init__(self, uri, user, password):
+    def __init__(self, uri, user, password, filepath):
         self._driver = GraphDatabase.driver(uri, auth=(user, password))
+        create_logger(filepath)
 
     def close(self):
         """Closes the connection to the database."""

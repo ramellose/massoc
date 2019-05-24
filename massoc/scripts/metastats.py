@@ -14,9 +14,8 @@ __license__ = 'Apache 2.0'
 from neo4j.v1 import GraphDatabase
 from uuid import uuid4
 from scipy.stats import hypergeom, spearmanr
-import logging
+from massoc.scripts.batch import create_logger
 import sys
-import os
 import logging.handlers
 
 logger = logging.getLogger(__name__)
@@ -29,25 +28,12 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 sh.setFormatter(formatter)
 logger.addHandler(sh)
 
-# handler to file
-# only handler with 'w' mode, rest is 'a'
-# once this handler is started, the file writing is cleared
-# other handlers append to the file
-logpath = "\\".join(os.getcwd().split("\\")[:-1]) + '\\massoc.log'
-# filelog path is one folder above massoc
-# pyinstaller creates a temporary folder, so log would be deleted
-fh = logging.handlers.RotatingFileHandler (maxBytes=500,
-                                      filename=logpath, mode='a')
-fh.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-fh.setFormatter(formatter)
-logger.addHandler(fh)
-
 
 class MetaDriver(object):
 
-    def __init__(self, uri, user, password):
+    def __init__(self, uri, user, password, filepath):
         self._driver = GraphDatabase.driver(uri, auth=(user, password))
+        create_logger(filepath)
 
     def close(self):
         """Closes the connection to the database."""

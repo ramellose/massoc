@@ -38,9 +38,7 @@ from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
 import json
 import sys
-import os
 from biom import load_table
-import logging
 import logging.handlers
 
 logger = logging.getLogger(__name__)
@@ -57,15 +55,6 @@ logger.addHandler(sh)
 # only handler with 'w' mode, rest is 'a'
 # once this handler is started, the file writing is cleared
 # other handlers append to the file
-logpath = "\\".join(os.getcwd().split("\\")[:-1]) + '\\massoc.log'
-# filelog path is one folder above massoc
-# pyinstaller creates a temporary folder, so log would be deleted
-fh = logging.handlers.RotatingFileHandler (maxBytes=500,
-                                      filename=logpath, mode='a')
-fh.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-fh.setFormatter(formatter)
-logger.addHandler(fh)
 
 
 class Batch(object):
@@ -114,6 +103,7 @@ class Batch(object):
         self.class_ = {}
         self.phylum = {}
         self.inputs = inputs
+        create_logger(self.inputs['fp'])
         if counts is not None:
             if 'otu' in counts:
                 self.otu = counts['otu']
@@ -514,3 +504,17 @@ def read_bioms(counts):
         for filename in counts[level]:
             bioms[level][filename] = load_table(counts[level][filename])
     return bioms
+
+
+def create_logger(filepath):
+    """ After a filepath has become available, loggers can be created
+    when required to report on errors. """
+    logpath = filepath + '/massoc.log'
+    # filelog path is one folder above massoc
+    # pyinstaller creates a temporary folder, so log would be deleted
+    fh = logging.handlers.RotatingFileHandler(maxBytes=500,
+                                              filename=logpath, mode='a')
+    fh.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
