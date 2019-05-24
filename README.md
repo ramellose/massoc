@@ -16,13 +16,24 @@ This is version 0.3.0, and therefore still in early alpha. Encountering bugs is 
 
 ## Getting Started
 
+You can access <i>massoc</i> through a CLI and a GUI.
+Detailed documentation of these interfaces, combined with a  manual describing all inputs, will be available soon.
+
+## Installation
+
 To run <i>massoc</i> on Windows or Ubuntu, you only need to run the appropriate executable for your platform.
 These executables are stand-alone and do not need the other files in the repository. However, some of the features
 require you to have installed specific software, for example Neo4j Server. Read the sections below to figure out which
 dependencies you need to install and how to do so.
 <a href="https://github.com/ramellose/massoc/releases">Find the latest releases here</a>.
 
-There is no executable available for macOS systems, but you can set up your macOS system to run massoc as follows.
+If you do not want to use these executables or have macOS system, you can install <i>massoc</i> directly from the repository.
+This can result in some issues with dependencies.
+```
+pip install git+https://github.com/ramellose/massoc.git
+```
+
+There is no executable available for macOS systems, but you can set up your macOS system to run <i>massoc</i> as follows.
 First install macports, then run:
 ```
 sudo port install python35
@@ -31,11 +42,6 @@ sudo port install py35-pip
 sudo port select --set pip pip35
 pip install numpy==1.13.1 scipy h5py nose Cython psutil neo4j matplotlib networkx multiprocess sklearn scikit-bio biom-format --user
 pip install -U wxPython --user
-```
-
-Download the massoc repository, navigate to the massoc directory and run:
-```
-python run_massoc.py
 ```
 
 To reset to the default Python version, run:
@@ -107,7 +113,6 @@ Check out the demo at https://github.com/ramellose/massoc/raw/master/massoc/docs
 ## Development version and command line
 
 For development purposes, the GUI can be executed from massocGUI.py.
-The command line interface is currently under development.
 
 massoc runs on Python 3.5. All its dependencies are listed in the requirements.txt file.
 
