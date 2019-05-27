@@ -21,7 +21,7 @@ import sys
 import os
 from biom import load_table
 from biom.parse import MetadataMap
-from massoc.scripts.batch import Batch, write_settings, read_settings, read_bioms, create_logger
+from massoc.scripts.batch import Batch, write_settings, read_settings, read_bioms
 from massoc.scripts.netwrap import Nets, run_parallel
 from copy import deepcopy
 from platform import system
@@ -205,7 +205,6 @@ def run_network(inputs, publish=False):
     # handler to file
     create_logger(inputs['fp'])
     filestore = read_bioms(inputs['procbioms'])
-    print(inputs)
     bioms = Batch(filestore, inputs)
     bioms = Nets(bioms)
     if inputs['tools'] is not None:
@@ -537,3 +536,17 @@ def start_database(inputs, publish):
         sleep(12)
     except Exception:
         logger.warning("Failed to start database.  ", exc_info=True)
+
+
+def create_logger(filepath):
+    """ After a filepath has become available, loggers can be created
+    when required to report on errors. """
+    logpath = filepath + '/massoc.log'
+    # filelog path is one folder above massoc
+    # pyinstaller creates a temporary folder, so log would be deleted
+    fh = logging.handlers.RotatingFileHandler(maxBytes=500,
+                                              filename=logpath, mode='a')
+    fh.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
