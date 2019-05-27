@@ -482,7 +482,6 @@ def run_metastats(inputs, publish=False):
             logger.info("Associating samples...  ")
             pub.sendMessage('update', msg="Associating samples...")
             # sys.stdout.write("Associating samples...")
-            print(inputs['variable'])
             if inputs['variable'][0] == 'all':
                 properties = set([x[y] for x in metadriver.custom_query("MATCH (n:Property) RETURN n.type") for y in x])
                 for prop in properties:
