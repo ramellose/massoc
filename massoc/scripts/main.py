@@ -285,7 +285,7 @@ def run_neo4j(inputs, publish=False):
                 pub.sendMessage('update', msg='Clearing database...')
             importdriver = ImportDriver(user=inputs['username'],
                                         password=inputs['password'],
-                                        uri=inputs['address'])
+                                        uri=inputs['address'], filepath=inputs['fp'])
             importdriver.clear_database()
             importdriver.close()
         except Exception:
@@ -298,7 +298,7 @@ def run_neo4j(inputs, publish=False):
                 pub.sendMessage('update', msg='Accessing database...')
             importdriver = ImportDriver(user=inputs['username'],
                                         password=inputs['password'],
-                                        uri=inputs['address'])
+                                        uri=inputs['address'], filepath=inputs['fp'])
             importdriver.export_network(path=inputs['fp'] + '/' + inputs['output'] + ".graphml")
             importdriver.close()
         except Exception:
@@ -311,7 +311,7 @@ def run_neo4j(inputs, publish=False):
                 pub.sendMessage('update', msg='Uploading files to database...')
             importdriver = ImportDriver(user=inputs['username'],
                                         password=inputs['password'],
-                                        uri=inputs['address'])
+                                        uri=inputs['address'], filepath=inputs['fp'])
             node_dict = dict()
             # create dictionary from file
             with open(inputs['add'], 'r') as file:
@@ -343,7 +343,7 @@ def run_neo4j(inputs, publish=False):
         sleep(12)
         importdriver = ImportDriver(user=inputs['username'],
                                     password=inputs['password'],
-                                    uri=inputs['address'])
+                                    uri=inputs['address'], filepath=inputs['fp'])
         # importdriver.clear_database()
         try:
             # pub.sendMessage('update', msg='Uploading BIOM files...')
@@ -397,10 +397,10 @@ def run_netstats(inputs, publish=False):
             # sys.stdout.write('Starting database drivers.')
         netdriver = NetDriver(user=inputs['username'],
                               password=inputs['password'],
-                              uri=inputs['address'])
+                              uri=inputs['address'], filepath=inputs['fp'])
         importdriver = ImportDriver(user=inputs['username'],
                                     password=inputs['password'],
-                                    uri=inputs['address'])
+                                    uri=inputs['address'], filepath=inputs['fp'])
     except Exception:
         logger.warning("Failed to start database worker.  ", exc_info=True)
     try:
