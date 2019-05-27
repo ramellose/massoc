@@ -49,7 +49,6 @@ import pandas
 import sys
 from copy import deepcopy
 from massoc.scripts.batch import Batch
-from massoc.scripts.batch import create_logger
 import multiprocessing as mp
 from functools import partial
 from subprocess import call
@@ -117,7 +116,7 @@ class Nets(Batch):
         self.networks = dict()
         self.names = list(self.otu)
         if self.inputs:
-            create_logger(self.inputs['fp'])
+            _create_logger(self.inputs['fp'])
         if type(self.otu) is not dict:
             logger.error("Please supply a dictionary of biom files. ", exc_info=True)
             raise ValueError("Please supply a dictionary of biom files.")
@@ -526,3 +525,16 @@ def run_parallel(nets):
     logger.info('Completed tasks! ')
     return nets
 
+
+def _create_logger(filepath):
+    """ After a filepath has become available, loggers can be created
+    when required to report on errors. """
+    logpath = filepath + '/massoc.log'
+    # filelog path is one folder above massoc
+    # pyinstaller creates a temporary folder, so log would be deleted
+    fh = logging.handlers.RotatingFileHandler(maxBytes=500,
+                                              filename=logpath, mode='a')
+    fh.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)

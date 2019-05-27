@@ -64,7 +64,7 @@ def get_input(inputs, publish=False):
     """
     # handler to file
     # construct logger after filepath is provided
-    create_logger(inputs['fp'])
+    _create_logger(inputs['fp'])
     if inputs['biom_file'] is not None:
         logger.info('BIOM file(s) to process: ' + ", ".join(inputs['biom_file']))
     if inputs['otu_table'] is not None:
@@ -203,7 +203,7 @@ def run_network(inputs, publish=False):
     old_inputs.update(inputs)
     inputs = old_inputs
     # handler to file
-    create_logger(inputs['fp'])
+    _create_logger(inputs['fp'])
     filestore = read_bioms(inputs['procbioms'])
     bioms = Batch(filestore, inputs)
     bioms = Nets(bioms)
@@ -235,7 +235,7 @@ def run_neo4j(inputs, publish=False):
     # overwritten settings should be retained
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
     # handler to file
-    create_logger(inputs['fp'])
+    _create_logger(inputs['fp'])
     # check if password etc is already there
     if 'username' in old_inputs:
         logins = dict((k, old_inputs[k]) for k in ('username', 'password', 'address', 'neo4j'))
@@ -389,7 +389,7 @@ def run_netstats(inputs, publish=False):
     old_inputs.update(inputs)
     inputs = old_inputs
     # handler to file
-    create_logger(inputs['fp'])
+    _create_logger(inputs['fp'])
     checks = str()
     try:
         if publish:
@@ -448,7 +448,7 @@ def run_metastats(inputs, publish=False):
     old_inputs.update(inputs)
     inputs = old_inputs
     # handler to file
-    create_logger(inputs['fp'])
+    _create_logger(inputs['fp'])
     checks = str()
     try:
         if publish:
@@ -538,7 +538,7 @@ def start_database(inputs, publish):
         logger.warning("Failed to start database.  ", exc_info=True)
 
 
-def create_logger(filepath):
+def _create_logger(filepath):
     """ After a filepath has become available, loggers can be created
     when required to report on errors. """
     logpath = filepath + '/massoc.log'

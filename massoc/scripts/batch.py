@@ -104,7 +104,7 @@ class Batch(object):
         self.phylum = {}
         self.inputs = inputs
         if inputs:
-            create_logger(self.inputs['fp'])
+            _create_logger(self.inputs['fp'])
         if counts is not None:
             if 'otu' in counts:
                 self.otu = counts['otu']
@@ -507,7 +507,7 @@ def read_bioms(counts):
     return bioms
 
 
-def create_logger(filepath):
+def _create_logger(filepath):
     """ After a filepath has become available, loggers can be created
     when required to report on errors. """
     logpath = filepath + '/massoc.log'

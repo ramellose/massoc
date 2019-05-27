@@ -13,7 +13,6 @@ __license__ = 'Apache 2.0'
 
 from neo4j.v1 import GraphDatabase
 import sys
-from massoc.scripts.batch import create_logger
 import logging.handlers
 
 logger = logging.getLogger(__name__)
@@ -31,7 +30,7 @@ class NetDriver(object):
 
     def __init__(self, uri, user, password, filepath):
         self._driver = GraphDatabase.driver(uri, auth=(user, password))
-        create_logger(filepath)
+        _create_logger(filepath)
 
     def close(self):
         """Closes the connection to the database."""
@@ -201,3 +200,17 @@ def _get_unique(node_list, key, mode=None):
     if mode == 'num':
         unique_samples = len(unique_samples)
     return unique_samples
+
+
+def _create_logger(filepath):
+    """ After a filepath has become available, loggers can be created
+    when required to report on errors. """
+    logpath = filepath + '/massoc.log'
+    # filelog path is one folder above massoc
+    # pyinstaller creates a temporary folder, so log would be deleted
+    fh = logging.handlers.RotatingFileHandler(maxBytes=500,
+                                              filename=logpath, mode='a')
+    fh.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
