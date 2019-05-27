@@ -482,13 +482,12 @@ def run_metastats(inputs, publish=False):
             logger.info("Associating samples...  ")
             pub.sendMessage('update', msg="Associating samples...")
             # sys.stdout.write("Associating samples...")
-            if inputs['variable'] == 'all':
+            print(inputs['variable'])
+            if inputs['variable'][0] == 'all':
                 properties = set([x[y] for x in metadriver.custom_query("MATCH (n:Property) RETURN n.type") for y in x])
                 for prop in properties:
                     metadriver.associate_samples(label=prop)
-            elif type(inputs['variable']) == str:
-                metadriver.associate_samples(label=inputs['variable'])
-            elif type(inputs['variable']) == list:
+            else:
                 for var in inputs['variable']:
                     metadriver.associate_samples(label=var)
             checks += 'Completed associations. \n'
