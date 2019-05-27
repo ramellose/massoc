@@ -341,7 +341,7 @@ metastatsparser.add_argument('-w', '--weight',
 metastatsparser.add_argument('-v', '--variable',
                              dest='variable',
                              required=False,
-                             type=list,
+                             type=str,
                              nargs='+',
                              help='Sample metadata variables to associate taxa to. Can be more than one variable. \n'
                                   'Specify "all" if you want to test all variables.')
