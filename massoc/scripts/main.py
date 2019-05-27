@@ -457,7 +457,7 @@ def run_metastats(inputs, publish=False):
         metadriver = MetaDriver(user=inputs['username'],
                                 password=inputs['password'],
                                 uri=inputs['address'],
-                                filepath=inputs['filepath'])
+                                filepath=inputs['fp'])
     except Exception:
         logger.warning("Failed to start database worker.  ", exc_info=True)
     try:
