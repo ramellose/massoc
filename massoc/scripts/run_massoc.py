@@ -259,7 +259,7 @@ neo4jparser.add_argument('-u', '--username',
                          required=False,
                          help='Username for neo4j database access. ',
                          type=str,
-                         default=['neo4j'])
+                         default='neo4j')
 neo4jparser.add_argument('-p', '--password',
                          dest='password',
                          required=False,

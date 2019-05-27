@@ -42,6 +42,7 @@ class ImportDriver(object):
             self._driver = GraphDatabase.driver(uri, auth=(user, password))
         except Exception:
             logger.error("Unable to start driver. \n", exc_info=True)
+            exit()
 
     def close(self):
         """Closes the connection to the database."""
