@@ -270,7 +270,7 @@ neo4jparser.add_argument('-a', '--address',
                          required=False,
                          help='Address for neo4j database. ',
                          type=str,
-                         default=['bolt://localhost:7687'])
+                         default='bolt://localhost:7687')
 neo4jparser.add_argument('-j', '--job',
                          dest='job',
                          required=False,

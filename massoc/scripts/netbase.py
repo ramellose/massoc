@@ -37,8 +37,11 @@ import logging.handlers
 class ImportDriver(object):
 
     def __init__(self, uri, user, password, filepath):
-        self._driver = GraphDatabase.driver(uri, auth=(user, password))
         _create_logger(filepath)
+        try:
+            self._driver = GraphDatabase.driver(uri, auth=(user, password))
+        except Exception:
+            logger.error("Unable to start driver. \n", exc_info=True)
 
     def close(self):
         """Closes the connection to the database."""
