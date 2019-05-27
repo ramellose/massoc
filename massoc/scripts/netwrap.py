@@ -116,7 +116,8 @@ class Nets(Batch):
             self.otu = otu
         self.networks = dict()
         self.names = list(self.otu)
-        create_logger(self.inputs['fp'])
+        if self.inputs:
+            create_logger(self.inputs['fp'])
         if type(self.otu) is not dict:
             logger.error("Please supply a dictionary of biom files. ", exc_info=True)
             raise ValueError("Please supply a dictionary of biom files.")

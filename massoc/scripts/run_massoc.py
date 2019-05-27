@@ -299,7 +299,8 @@ neo4jparser.set_defaults(database=True)
 netstatsparser = subparsers.add_parser('netstats', description='Network analysis module.',
                                        help='If the user has previously set up a Neo4j graph database,'
                                             'this module carries out cluster analysis and '
-                                            'identifies central nodes. The module also generates null models'
+                                            'identifies central nodes. '
+                                            'In the future, the module will also generates null models'
                                             ' for statistical analyses. ')
 netstatsparser.add_argument('-l', '--logic',
                             dest='logic',

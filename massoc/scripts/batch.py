@@ -103,7 +103,8 @@ class Batch(object):
         self.class_ = {}
         self.phylum = {}
         self.inputs = inputs
-        create_logger(self.inputs['fp'])
+        if inputs:
+            create_logger(self.inputs['fp'])
         if counts is not None:
             if 'otu' in counts:
                 self.otu = counts['otu']
