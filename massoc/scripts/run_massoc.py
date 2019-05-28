@@ -22,7 +22,6 @@ from massoc.scripts.main import get_input, run_network, \
     run_neo4j, run_netstats, run_metastats
 import os
 import argparse
-import logging
 import logging.handlers
 
 logger = logging.getLogger(__name__)

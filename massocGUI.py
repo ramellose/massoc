@@ -17,6 +17,7 @@ __status__ = 'Development'
 __license__ = 'Apache 2.0'
 
 import wx
+import massoc
 from massoc.scripts.main import resource_path
 from wx.lib.pubsub import pub
 from massoc.GUI.intro import IntroPanel
