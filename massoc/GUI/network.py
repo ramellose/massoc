@@ -323,7 +323,6 @@ class NetworkPanel(wx.Panel):
             eg.join()  # necessary for ubuntu thread to quit crashing
         except Exception:
             logger.error("Failed to start worker thread. ", exc_info=True)
-        self.send_settings()
         self.settings['network'] = list()
         network_names = list()
         for tool in self.settings['tools']:
@@ -332,6 +331,7 @@ class NetworkPanel(wx.Panel):
                     filename = self.settings['fp'] + '/' + tool + '_' + name + '_' + level + '.txt'
                     network_names.append(filename)
         self.settings['network'] = network_names
+        self.send_settings()
 
 
     def review_settings(self, msg):
