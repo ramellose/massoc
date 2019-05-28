@@ -421,7 +421,7 @@ def run_netstats(inputs, publish=False):
                     importdriver.export_network(path=inputs['fp'] + '/' +
                                                 file + '_' + "_".join(inputs['networks']) + '.graphml',
                                                 pairlist=pairlist[file])
-                    logger.info(inputs['fp'] + '/' +
+                    logger.info("Exporting networks to: " + inputs['fp'] + '/' +
                                 file + '_' + "_".join(inputs['networks']) + '.graphml')
                     checks += "Exporting networks to: " + inputs['fp'] + '/' +\
                               file + '_' + "_".join(inputs['networks']) + '.graphml' "\n"
@@ -429,7 +429,7 @@ def run_netstats(inputs, publish=False):
                     importdriver.export_network(path=inputs['fp'] + '/' +
                                                      file + '_complete.graphml',
                                                 pairlist=pairlist[file])
-                    logger.info(inputs['fp'] + '/' +
+                    logger.info("Exporting networks to: " + inputs['fp'] + '/' +
                                 file + '_complete.graphml')
                     checks += "Exporting networks to: " + inputs['fp'] + '/' +\
                               file + '_complete.graphml' "\n"
