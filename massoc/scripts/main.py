@@ -416,17 +416,24 @@ def run_netstats(inputs, publish=False):
             checks += 'Logic operations completed. \n'
             if publish:
                 pub.sendMessage('update', msg="Exporting network...")
-            logger.info("Exporting network to: " + inputs['fp'])
-            checks += "Exporting network to: " + inputs['fp'] + "\n"
             for file in pairlist:
+                print(file)
                 if inputs['networks'] is not None:
                     importdriver.export_network(path=inputs['fp'] + '/' +
                                                 file + '_' + "_".join(inputs['networks']) + '.graphml',
                                                 pairlist=pairlist[file])
+                    logger.info(inputs['fp'] + '/' +
+                                file + '_' + "_".join(inputs['networks']) + '.graphml')
+                    checks += "Exporting networks to: " + inputs['fp'] + '/' +\
+                              file + '_' + "_".join(inputs['networks']) + '.graphml' "\n"
                 else:
                     importdriver.export_network(path=inputs['fp'] + '/' +
                                                      file + '_complete.graphml',
                                                 pairlist=pairlist[file])
+                    logger.info(inputs['fp'] + '/' +
+                                file + '_complete.graphml')
+                    checks += "Exporting networks to: " + inputs['fp'] + '/' +\
+                              file + '_complete.graphml' "\n"
         else:
             logger.warning("No logic operation specified!")
         if publish:
