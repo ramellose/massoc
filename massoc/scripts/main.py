@@ -185,6 +185,38 @@ def get_input(inputs, publish=False):
         for name in bioms.inputs['name']:
             biomname = bioms.inputs['fp'] + '/' + name + '_' + level + '.hdf5'
             bioms.inputs['procbioms'][level][name] = biomname
+    if inputs['network'] is not None:
+        if publish:
+            pub.sendMessage('update', msg='Checking previously generated networks...')
+        logger.info('Checking previously generated networks...')
+        filelist = deepcopy(inputs['network'])
+        for file in filelist:
+            network = nx.read_weighted_edgelist(file)
+            nodes = len(network.nodes)
+            edges = len(network.edges)
+            logger.info("This network has " + str(nodes) + \
+                           " nodes and " + str(edges) + " edges.")
+            weight = nx.get_edge_attributes(network, 'weight')
+            if len(weight) > 0:
+                logger.info('This is a weighted network.')
+            else:
+                logger.info('This is an unweighted network.')
+            match = 0
+            taxa = None
+            for biomfile in inputs['biom_file']:
+                try:
+                    biomtab = load_table(biomfile)
+                    taxa = biomtab.ids(axis='observation')
+                except TypeError:
+                    logger.error("Could not access source BIOM file. ", exc_info=True)
+                if len(taxa) > 1:
+                    nodes = list(network.nodes)
+                    if all(elem in taxa for elem in nodes):
+                        match += 1
+                        logger.info('Node identifiers in ' + biomfile + \
+                                       ' matched node identifiers in ' + file + '.')
+            if match == 0:
+                logger.error("No BIOM file matched network nodes!. ", exc_info=True)
     try:
         bioms.write_bioms()
         logger.info('BIOM files written to disk.  ')

@@ -78,6 +78,10 @@ inputparser = subparsers.add_parser('input', description='Import files and prepr
                                          'clustering, rarefaction, and prevalence filtering. '
                                          'Additionally, in case users want to run network inference on '
                                          'different taxonomic levels, this module agglomerates the data.')
+inputparser.add_argument('-fp', '--output_filepath',
+                         dest='fp',
+                         help='Filepath for saving output files',
+                         default=os.getcwd())
 inputparser.add_argument('-biom', '--biom_file',
                          dest='biom_file',
                          nargs='+',
@@ -161,10 +165,6 @@ inputparser.add_argument('-min', '--mininum_abundance',
                          'before filtering.',
                          type=int,
                          default=None)
-inputparser.add_argument('-fp', '--output_filepath',
-                         dest='fp',
-                         help='Filepath for saving output files',
-                         default=os.getcwd())
 inputparser.add_argument('-name', '--file_name',
                          dest='name',
                          help='Prefix for saving output files. '
@@ -178,6 +178,11 @@ inputparser.add_argument('-levels', '--tax_levels',
                          help='Taxonomic levels used for network inference.',
                          default=['otu'],
                          choices=['otu', 'species', 'genus', 'family', 'order', 'class', 'phylum'])
+inputparser.add_argument('-net', '--networks',
+                         dest='network',
+                         nargs='+',
+                         help='Weighted edge lists of previously generated networks.',
+                         default=None)
 inputparser.set_defaults(input=True)
 
 networkparser = subparsers.add_parser('network', description='Runs network inference.',
