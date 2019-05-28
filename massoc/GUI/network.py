@@ -307,18 +307,13 @@ class NetworkPanel(wx.Panel):
             logger.error("Failed to change number of repetitions. ", exc_info=True)
 
     def run_network(self, event):
-        self.settings['network'] = list()
         self.settings['procbioms'] = list()
-        network_names = list()
         biom_names = list()
         for tool in self.settings['tools']:
             for level in self.settings['levels']:
                 for name in self.settings['name']:
-                    filename = self.settings['fp'] + '/' + tool + '_' + name + '_' + level + '.txt'
                     biomname = self.settings['fp'] + '/' + name + '_' + level + '.hdf5'
                     biom_names.append(biomname)
-                    network_names.append(filename)
-        self.settings['network'] = network_names
         self.settings['procbioms'] = biom_names
         try:
             eg = Thread(target=massoc_worker, args=(self.settings,))
@@ -329,6 +324,14 @@ class NetworkPanel(wx.Panel):
         except Exception:
             logger.error("Failed to start worker thread. ", exc_info=True)
         self.send_settings()
+        self.settings['network'] = list()
+        network_names = list()
+        for tool in self.settings['tools']:
+            for level in self.settings['levels']:
+                for name in self.settings['name']:
+                    filename = self.settings['fp'] + '/' + tool + '_' + name + '_' + level + '.txt'
+                    network_names.append(filename)
+        self.settings['network'] = network_names
 
 
     def review_settings(self, msg):
