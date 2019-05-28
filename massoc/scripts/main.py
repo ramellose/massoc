@@ -407,17 +407,16 @@ def run_netstats(inputs, publish=False):
         # write operations here
         pairlist = dict()
         if inputs['logic']:
-            if inputs['logic'] == 'Union':
+            if inputs['logic'] == 'union':
                 pairlist['union'] = netdriver.graph_union(networks=inputs['networks'])
-            if inputs['logic'] == 'Intersection':
+            if inputs['logic'] == 'intersection':
                 pairlist['intersection'] = netdriver.graph_intersection(networks=inputs['networks'])
-            if inputs['logic'] == 'Difference':
+            if inputs['logic'] == 'difference':
                 pairlist['difference'] = netdriver.graph_difference(networks=inputs['networks'])
             checks += 'Logic operations completed. \n'
             if publish:
                 pub.sendMessage('update', msg="Exporting network...")
             for file in pairlist:
-                print(file)
                 if inputs['networks'] is not None:
                     importdriver.export_network(path=inputs['fp'] + '/' +
                                                 file + '_' + "_".join(inputs['networks']) + '.graphml',

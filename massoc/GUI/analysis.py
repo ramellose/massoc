@@ -215,7 +215,7 @@ class AnalysisPanel(wx.Panel):
         if text == 'None':
             self.logic = None
         else:
-            self.logic = text
+            self.logic = text.lower()
         self.send_settings()
 
     def get_network(self, event):
