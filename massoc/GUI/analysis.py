@@ -211,11 +211,14 @@ class AnalysisPanel(wx.Panel):
 
     def get_logic(self, event):
         name = self.logic_choice.GetSelection()
-        text = self.logic_choice.GetString(name)
-        if text == 'None':
+        text = list()
+        text.append(self.logic_choice.GetString(name))
+        self.logic = list()
+        if 'None' in text:
             self.logic = None
         else:
-            self.logic = text.lower()
+            for val in text:
+                self.logic.append(val.lower())
         self.send_settings()
 
     def get_network(self, event):
