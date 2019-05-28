@@ -161,9 +161,9 @@ class DataPanel(wx.Panel):
         self.rightsizer.Add(self.go, flag=wx.ALIGN_LEFT)
         self.rightsizer.AddSpacer(20)
 
-        self.topsizer.AddSpacer(10)
+        self.topsizer.AddSpacer(20)
         self.topsizer.Add(self.leftsizer)
-        self.topsizer.AddSpacer(10)
+        self.topsizer.AddSpacer(40)
         self.topsizer.Add(self.rightsizer)
 
         self.SetSizerAndFit(self.topsizer)
@@ -243,6 +243,7 @@ class DataPanel(wx.Panel):
         except Exception:
             logger.error("Failed to upload data to database. ", exc_info=True)
         dlg.Destroy()
+        self.settings['add'] = None
 
     def start_database(self, event):
         checks = str()
@@ -475,7 +476,6 @@ def data_clear(inputs):
 
 def data_adder(inputs):
     """Adds edge list of node properties to Neo4j database."""
-    inputs['job'] = 'add'
     run_neo4j(inputs, publish=True)
     pub.sendMessage('update', msg='Completed database operations!')
 

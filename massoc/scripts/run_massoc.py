@@ -279,15 +279,19 @@ neo4jparser.add_argument('-a', '--address',
 neo4jparser.add_argument('-j', '--job',
                          dest='job',
                          required=False,
-                         choices=['add', 'clear', 'quit', 'start', 'upload', 'write'],
+                         choices=['clear', 'quit', 'start', 'upload', 'write'],
                          default='upload',
                          help='Operation to carry out on Neo4j database. \n'
-                              'add: Add an edge list to the database. \n'
                               'clear: Remove all edges and nodes from the database. \n'
                               'quit: Safely shut down the database. Retains data. \n'
                               'start: Start local database. \n'
                               'upload: Upload BIOM file(s) in settings to the database. \n'
                               'write: Export Cytoscape-compatible file from the database.')
+neo4jparser.add_argument('-add', '--additional_data',
+                         dest='add',
+                         required=False,
+                         default=None,
+                         help='Filepath to edge list that will be uploaded to the Neo4j database.')
 neo4jparser.add_argument('-o', '-output',
                          dest='output',
                          required=False,

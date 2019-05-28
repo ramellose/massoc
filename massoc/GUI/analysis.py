@@ -151,9 +151,9 @@ class AnalysisPanel(wx.Panel):
         self.rightsizer.Add(self.go_net, flag=wx.ALIGN_CENTER)
         self.rightsizer.AddSpacer(20)
 
-        self.topsizer.AddSpacer(10)
+        self.topsizer.AddSpacer(20)
         self.topsizer.Add(self.leftsizer)
-        self.topsizer.AddSpacer(10)
+        self.topsizer.AddSpacer(40)
         self.topsizer.Add(self.rightsizer)
 
         self.SetSizerAndFit(self.topsizer)

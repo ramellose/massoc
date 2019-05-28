@@ -335,31 +335,6 @@ def run_neo4j(inputs, publish=False):
             importdriver.close()
         except Exception:
             logger.warning("Failed to write database to graphml file.  ", exc_info=True)
-    elif inputs['job'] == 'add':
-        if not existing_pid:
-            start_database(inputs, publish)
-        try:
-            if publish:
-                pub.sendMessage('update', msg='Uploading files to database...')
-            importdriver = ImportDriver(user=inputs['username'],
-                                        password=inputs['password'],
-                                        uri=inputs['address'], filepath=inputs['fp'])
-            node_dict = dict()
-            # create dictionary from file
-            with open(inputs['add'], 'r') as file:
-                # Second column name is type
-                # Newline is cutoff
-                colnames = file.readline().split(sep="\t")
-                label = colnames[0].rstrip()
-                name = colnames[1].rstrip()
-                for line in file:
-                    source = line.split(sep="\t")[0].rstrip()
-                    target = line.split(sep="\t")[1].rstrip()
-                    node_dict[source] = target
-            importdriver.include_nodes(nodes=inputs['add'], name=name, label=label)
-            importdriver.close()
-        except Exception:
-            logger.warning("Failed to upload properties to database.  ", exc_info=True)
     else:
         if not existing_pid:
             start_database(inputs, publish)
@@ -412,7 +387,35 @@ def run_neo4j(inputs, publish=False):
         if publish:
             pub.sendMessage('database_log', msg=checks)
         importdriver.close()
+    if inputs['add']:
+        if not existing_pid:
+            start_database(inputs, publish)
+        try:
+            if publish:
+                pub.sendMessage('update', msg='Uploading files to database...')
+            importdriver = ImportDriver(user=inputs['username'],
+                                        password=inputs['password'],
+                                        uri=inputs['address'], filepath=inputs['fp'])
+            node_dict = dict()
+            # create dictionary from file
+            for filepath in inputs['add']:
+                with open(filepath, 'r') as file:
+                    # Second column name is type
+                    # Newline is cutoff
+                    colnames = file.readline().split(sep="\t")
+                    label = colnames[0].rstrip()
+                    name = colnames[1].rstrip()
+                    for line in file:
+                        source = line.split(sep="\t")[0].rstrip()
+                        target = line.split(sep="\t")[1].rstrip()
+                        node_dict[source] = target
+                importdriver.include_nodes(nodes=inputs['add'], name=name, label=label)
+                importdriver.close()
+        except Exception:
+            logger.warning("Failed to upload properties to database.  ", exc_info=True)
     logger.info('Completed database operations!  ')
+    inputs['add'] = None
+    # prevents reuploading
     write_settings(inputs)
 
 
