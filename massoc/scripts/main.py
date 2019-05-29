@@ -69,15 +69,15 @@ def get_input(inputs, publish=False):
         logger.info('BIOM file(s) to process: ' + ", ".join(inputs['biom_file']))
     if inputs['otu_table'] is not None:
         logger.info('Tab-delimited OTU table(s) to process: ' + ", ".join(inputs['otu_table']))
-    if inputs['otu_table'] and inputs['tax_table'] is not None:
+    if inputs['tax_table'] is not None:
         if len(inputs['otu_table']) is not len(inputs['tax_table']):
             logger.error("Add a taxonomy table for every OTU table!", exc_info=True)
             raise ValueError("Add a taxonomy table for every OTU table!")
-    if inputs['otu_table'] and inputs['sample_data'] is not None:
+    if inputs['sample_data'] is not None:
         if len(inputs['otu_table']) is not len(inputs['sample_data']):
             logger.error("Add a sample data table for every OTU table!", exc_info=True)
             raise ValueError("Add a sample data table for every OTU table!")
-    if inputs['otu_table'] and inputs['otu_meta'] is not None:
+    if inputs['otu_meta'] is not None:
         if len(inputs['otu_table']) is not len(inputs['otu_meta']):
             logger.error("Add a metadata table for every OTU table!", exc_info=True)
             raise ValueError("Add a metadata table for every OTU table!")

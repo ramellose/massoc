@@ -36,13 +36,11 @@ class ProcessPanel(wx.Panel):
         wx.Panel.__init__(self, parent)
         self.frame = parent
         # subscribe to input tab
-        pub.subscribe(self.receive_meta, 'receive_metadata')
-        pub.subscribe(self.register_figures, 'receive_tax')
         pub.subscribe(self.load_settings, 'load_settings')
         pub.subscribe(self.enable_tax, 'receive_tax')
         pub.subscribe(self.toggle_network, 'toggle_network')
         pub.subscribe(self.set_settings, 'input_settings')
-
+        pub.subscribe(self.set_meta, 'input_metadata')
 
 
         btnsize = (300, -1)
@@ -60,6 +58,8 @@ class ProcessPanel(wx.Panel):
         self.rar = None
         self.min = None
         self.filelist = None
+        self.meta = None
+        # metadata only required for setting split list
         self.topsizer = wx.BoxSizer(wx.HORIZONTAL)
 
         # defines columns
@@ -236,10 +236,9 @@ class ProcessPanel(wx.Panel):
         self.tax_choice.Enable(True)
 
     def split_files(self, event):
-        self.split = list()
         name = self.split_list.GetSelection()
         text = self.split_list.GetString(name)
-        self.split.append = text
+        self.split = text
         self.send_settings()
 
     def get_levels(self, event):
@@ -277,7 +276,6 @@ class ProcessPanel(wx.Panel):
         dlg = ClusterDialog(self.filelist)
         dlg.ShowModal()
 
-
     def send_settings(self):
         """
         Publisher function for settings
@@ -286,15 +284,6 @@ class ProcessPanel(wx.Panel):
                     'levels': self.agglom, 'nclust': self.nclust,
                     'rar': self.rar, 'min': self.min, 'cluster': self.cluster}
         pub.sendMessage('process_settings', msg=settings)
-
-    def receive_meta(self, msg):
-        """
-        Listener function that registers whether a BIOM file with metadata
-        or separate metadata file has been supplied.
-        It opens the file to check whether there are variables present,
-        and updates the split_list listbox to include these variables.
-        """
-        self.split_list.Set(msg)
 
     def set_settings(self, msg):
         """
@@ -315,6 +304,11 @@ class ProcessPanel(wx.Panel):
                 self.generate_figures()
         except Exception:
             logger.error("Failed to save settings. ", exc_info=True)
+
+    def set_meta(self, msg):
+        """Stores a dictionary of BIOM filenames and metadata vars."""
+        self.meta = msg
+        self.generate_figures()
 
     def load_settings(self, msg):
         """
@@ -388,28 +382,46 @@ class ProcessPanel(wx.Panel):
         #     logger.error("Unable to load settings", exc_info=True)
         self.send_settings()
 
-    def register_figures(self, msg):
+    def register_figures(self, event):
         """Registers listbox event and calls generate_figures."""
         self.generate_figures()
 
     def generate_figures(self):
-        """Generates figures for diagnostics canvas."""
-        try:
-            file = self.file_list.GetSelection()
-            file = self.file_list.GetString(file)
-            biomfile = biom.load_table(file)
-            data = biomfile.matrix_data
-            data = csr_matrix.todense(data)
-            fracs = np.count_nonzero(data, axis=1)
-            nsamples = data.shape[1]
-            fracs = fracs / nsamples
-            self.prevfig.hist(fracs, bins=20)
-            sample_sums = np.transpose(np.count_nonzero(data, axis=0))
-            self.rarfig.hist(sample_sums, bins=40)
-            self.canvas1.draw()
-            self.canvas2.draw()
-        except Exception:
-            pass
+        """Generates figures for diagnostics canvas.
+        Also sets the split file params. """
+        file = self.file_list.GetSelection()
+        file = self.file_list.GetString(file)
+        biomfile = biom.load_table(file)
+        if biomfile.metadata(axis='sample'):
+            varlist = list(biomfile.metadata_to_dataframe(axis='sample').columns)
+            varlist.sort()
+            self.split_list.Set(varlist)
+        else:
+            if self.meta:
+                if file in self.meta:
+                    varlist = self.meta[file]
+                    varlist.sort()
+                    self.split_list.Set(varlist)
+        data = biomfile.matrix_data
+        data = csr_matrix.todense(data)
+        fracs = np.count_nonzero(data, axis=1)
+        nsamples = data.shape[1]
+        fracs = fracs / nsamples
+        self.prevfig.clear()
+        self.prevfig.hist(fracs, bins=20)
+        self.prevfig.set_xlabel('Prevalence')
+        self.prevfig.set_title('Taxon prevalence')
+        self.prevfig.set_ylabel('Number of taxa')
+        sample_sums = np.transpose(np.count_nonzero(data, axis=0))
+        self.rarfig.clear()
+        self.rarfig.hist(sample_sums, bins=40)
+        self.rarfig.set_xlabel('Count number')
+        self.rarfig.set_title('Sample counts')
+        self.rarfig.set_ylabel('Number of samples')
+        self.canvas1.draw()
+        self.canvas2.draw()
+
+
 
     def toggle_network(self, msg):
         if msg == 'Yes':

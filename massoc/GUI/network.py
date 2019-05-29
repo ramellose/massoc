@@ -264,8 +264,11 @@ class NetworkPanel(wx.Panel):
         self.send_settings()
 
     def send_cores(self, event):
-        self.cores = int(self.jobs_choice.GetValue())
-        self.send_settings()
+        try:
+            self.cores = int(self.jobs_choice.GetValue())
+            self.send_settings()
+        except ValueError:
+            pass
 
     def change_spiec_alg(self, event):
         """Takes settings input from GUI and uses it to rewrite the SPIEC-EASI script in execs."""
@@ -328,7 +331,7 @@ class NetworkPanel(wx.Panel):
         for tool in self.settings['tools']:
             for level in self.settings['levels']:
                 for name in self.settings['name']:
-                    filename = self.settings['fp'] + '/' + tool + '_' + name + '_' + level + '.txt'
+                    filename = self.settings['fp'] + '/' + tool + '_' + level + '_' + name + '.txt'
                     network_names.append(filename)
         self.settings['network'] = network_names
         self.send_settings()

@@ -436,7 +436,7 @@ def run_jobs(job, spar, conet, orig_ids, obs_ids, filenames,
     """
     Accepts a job from a joblist to run network inference in parallel.
     """
-    select_filenames = {job[list(job.keys())[0]]: filenames[job[list(job.keys())[0]]]}
+    select_filenames = {job[0]: {job[2]: filenames[job[0]][job[2]]}}
     # only filenames with the same taxonomic level are included
     if 'spiec-easi' in job:
         logger.info('Running SPIEC-EASI... ')
@@ -468,22 +468,22 @@ def get_joblist(nets):
     """
     Creates a list of jobs that can be distributed over multiple processes.
     Note: should be appended to handle multiple taxonomic levels + files!
-    Each job is a dictionary: the key represents a tool, while the
-    value represents taxonomic level and file location.
+    Each job is a tuple of the taxonomic level, tool and name.
     """
     joblist = list()
-    for level in nets.inputs['levels']:
-        sublist = dict()
-        if nets.inputs['tools']:
-            for i in nets.inputs['tools']:
-                sublist[i] = level
-        if nets.inputs['spiec'] is not None:
-            sublist['spiec_setting'] = [level, nets.inputs['spiec']]
-        if nets.inputs['spar_boot'] or nets.inputs['spar_pval'] is not None:
-            sublist['spar_setting'] = [level, {'spar_boot': nets.inputs['spar_boot'],
-            'spar_pval': nets.inputs['spar_pval']}]
-        for value in sublist:
-            joblist.append({value: sublist[value]})
+    for name in nets.names:
+        for level in nets.inputs['levels']:
+            sublist = dict()
+            if nets.inputs['tools']:
+                for i in nets.inputs['tools']:
+                    sublist[i] = level
+            if nets.inputs['spiec'] is not None:
+                sublist['spiec_setting'] = [level, nets.inputs['spiec']]
+            if nets.inputs['spar_boot'] or nets.inputs['spar_pval'] is not None:
+                sublist['spar_setting'] = [level, {'spar_boot': nets.inputs['spar_boot'],
+                'spar_pval': nets.inputs['spar_pval']}]
+            for value in sublist:
+                joblist.append((sublist[value], value, name))
     return joblist
 
 

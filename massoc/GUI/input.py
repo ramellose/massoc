@@ -196,9 +196,9 @@ class InputPanel(wx.Panel):
         if dlg.ShowModal() == wx.ID_OK:
             paths = dlg.GetPaths()
             paths = [x.replace('\\', '/') for x in paths]
+            self.biom_file = paths
             if len(paths) > 0:
-                self.biom_file = paths
-        self.biom_txt.SetValue("\n".join(self.biom_file))
+                self.biom_txt.SetValue("\n".join(self.biom_file))
         self.send_settings()
         self.checkfiles('biom')
         dlg.Destroy()
@@ -239,7 +239,7 @@ class InputPanel(wx.Panel):
         path = self.currentDirectory.replace("\\", "/")
         settings = {'fp': path, 'otu_table': self.count_file, 'tax_table': self.tax_file,
                     'sample_data': self.sample_file, 'biom_file': self.biom_file,
-                    'network': self.network_path}
+                    'network': self.network_path, 'otu_meta': None}
         pub.sendMessage('input_settings', msg=settings)
 
     def clear_settings(self, event):
@@ -335,9 +335,11 @@ class InputPanel(wx.Panel):
             self.checkfiles('count')
             self.count_txt.SetValue('\n'.join(self.settings['otu_table']))
         if self.settings['tax_table'] is not None:
+            self.tax_file = self.settings['tax_table']
             self.checkfiles('tax')
             self.tax_txt.SetValue('\n'.join(self.settings['tax_table']))
         if self.settings['sample_data'] is not None:
+            self.sample_file = self.settings['sample_data']
             self.checkfiles('meta')
             self.meta_txt.SetValue('\n'.join(self.settings['sample_data']))
         if self.settings['network'] is not None:
@@ -456,7 +458,7 @@ class InputPanel(wx.Panel):
 
     def checkfiles(self, filetype):
         # define how files should be checked for, it is important that import functions work!
-        if filetype is 'count':
+        if filetype is 'count' and self.count_file:
             for x in self.count_file:
                 try:
                     biomtab = biom.load_table(x)
@@ -467,7 +469,7 @@ class InputPanel(wx.Panel):
                 except(TypeError, BiomParseException):
                     wx.LogError("Cannot parse biom file '%s'." % x)
                     logger.error("Cannot parse biom file. \n", exc_info=True)
-        if filetype is 'biom':
+        if filetype is 'biom' and self.biom_file:
             for x in self.biom_file:
                 try:
                     biomtab = biom.load_table(x)
@@ -490,7 +492,7 @@ class InputPanel(wx.Panel):
                 except(TypeError, BiomParseException):
                     wx.LogError(str(x) + ' does not appear to be a BIOM-compatible table!')
                     logger.error(str(x) + ' does not appear to be a BIOM-compatible table!. ', exc_info=True)
-        if filetype is 'tax':
+        if filetype is 'tax' and self.tax_file:
             for x, z in zip(self.count_file, self.tax_file):
                 try:
                     biomtab = biom.load_table(x)
@@ -512,7 +514,8 @@ class InputPanel(wx.Panel):
                 except(TypeError, ValueError, BiomParseException):
                     wx.LogError(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!')
                     logger.error(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file! ', exc_info=True)
-        if filetype is 'meta':
+        if filetype is 'meta' and self.sample_file:
+            meta_dict = dict()
             for x, z in zip(self.count_file, self.sample_file):
                 try:
                     biomtab = biom.load_table(x)
@@ -530,10 +533,11 @@ class InputPanel(wx.Panel):
                         varlist.append(name)
                     names = '\n'.join(allnames)
                     self.checks += "The sample data contains the following variables: \n" + names + "\n"
-                    pub.sendMessage('receive_metadata', msg=varlist)
+                    meta_dict[x] = varlist
                 except(TypeError, KeyError, ValueError, BiomParseException):
                     wx.LogError(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!')
                     logger.error(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file! ', exc_info=True)
+            pub.sendMessage('input_metadata', msg=meta_dict)
         if filetype is 'network':
             try:
                 nets_object = get_input(self.settings)

@@ -343,7 +343,7 @@ class Batch(object):
                 biomtab = new_dict[x]
                 if inputs['split'] not in biomtab._sample_metadata[1]:
                     if inputs['split'] is not 'TRUE':
-                        raise ValueError("Sample metadata does not contain this header!")
+                        raise Warning("Sample metadata of " + x + "does not contain this header!")
                 new_tables = biomtab.partition(part_f, axis='sample')
                 for new in new_tables:
                     key = x + '_' + new[0]
