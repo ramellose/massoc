@@ -307,7 +307,8 @@ class ProcessPanel(wx.Panel):
 
     def set_meta(self, msg):
         """Stores a dictionary of BIOM filenames and metadata vars."""
-        self.meta = msg
+        self.meta = msg[0]
+        self.split = msg[1]
         self.generate_figures()
 
     def load_settings(self, msg):
@@ -354,9 +355,6 @@ class ProcessPanel(wx.Panel):
             self.prev_val.SetValue(str(20))
         if msg['split'] is not None:
             self.split = msg['split']
-            if msg['split'] is not 'TRUE':
-                split = self.split_list.FindString(msg['split'])
-                self.split_list.SetSelection(split)
         else:
             self.split = None
             self.split_list.Set(['Select a BIOM or metadata file first'])
@@ -390,36 +388,40 @@ class ProcessPanel(wx.Panel):
         """Generates figures for diagnostics canvas.
         Also sets the split file params. """
         file = self.file_list.GetSelection()
-        file = self.file_list.GetString(file)
-        biomfile = biom.load_table(file)
-        if biomfile.metadata(axis='sample'):
-            varlist = list(biomfile.metadata_to_dataframe(axis='sample').columns)
-            varlist.sort()
-            self.split_list.Set(varlist)
-        else:
-            if self.meta:
-                if file in self.meta:
-                    varlist = self.meta[file]
-                    varlist.sort()
-                    self.split_list.Set(varlist)
-        data = biomfile.matrix_data
-        data = csr_matrix.todense(data)
-        fracs = np.count_nonzero(data, axis=1)
-        nsamples = data.shape[1]
-        fracs = fracs / nsamples
-        self.prevfig.clear()
-        self.prevfig.hist(fracs, bins=20)
-        self.prevfig.set_xlabel('Prevalence')
-        self.prevfig.set_title('Taxon prevalence')
-        self.prevfig.set_ylabel('Number of taxa')
-        sample_sums = np.transpose(np.count_nonzero(data, axis=0))
-        self.rarfig.clear()
-        self.rarfig.hist(sample_sums, bins=40)
-        self.rarfig.set_xlabel('Count number')
-        self.rarfig.set_title('Sample counts')
-        self.rarfig.set_ylabel('Number of samples')
-        self.canvas1.draw()
-        self.canvas2.draw()
+        if file != -1:
+            file = self.file_list.GetString(file)
+            biomfile = biom.load_table(file)
+            if biomfile.metadata(axis='sample'):
+                varlist = list(biomfile.metadata_to_dataframe(axis='sample').columns)
+                varlist.sort()
+                self.split_list.Set(varlist)
+            else:
+                if self.meta:
+                    if file in self.meta:
+                        varlist = self.meta[file]
+                        varlist.sort()
+                        self.split_list.Set(varlist)
+            if self.split:
+                split = self.split_list.FindString(self.split)
+                self.split_list.SetSelection(split)
+            data = biomfile.matrix_data
+            data = csr_matrix.todense(data)
+            fracs = np.count_nonzero(data, axis=1)
+            nsamples = data.shape[1]
+            fracs = fracs / nsamples
+            self.prevfig.clear()
+            self.prevfig.hist(fracs, bins=20)
+            self.prevfig.set_xlabel('Prevalence')
+            self.prevfig.set_title('Taxon prevalence')
+            self.prevfig.set_ylabel('Number of taxa')
+            sample_sums = np.transpose(np.count_nonzero(data, axis=0))
+            self.rarfig.clear()
+            self.rarfig.hist(sample_sums, bins=40)
+            self.rarfig.set_xlabel('Count number')
+            self.rarfig.set_title('Sample counts')
+            self.rarfig.set_ylabel('Number of samples')
+            self.canvas1.draw()
+            self.canvas2.draw()
 
 
 

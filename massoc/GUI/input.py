@@ -43,13 +43,14 @@ class InputPanel(wx.Panel):
         self.settings = dict()
 
         self.currentDirectory = None
-        self.currentDirectory = [os.getcwd()]
+        self.currentDirectory = os.getcwd()
         self.count_file = None
         self.tax_file = None
         self.sample_file = None
         self.biom_file = None
         self.network_path = None
         self.checks = str()
+        self.split = None
 
         btnsize = (300, -1)
         btnmargin = 10
@@ -338,6 +339,8 @@ class InputPanel(wx.Panel):
             self.tax_file = self.settings['tax_table']
             self.checkfiles('tax')
             self.tax_txt.SetValue('\n'.join(self.settings['tax_table']))
+        if self.settings['split'] is not None:
+            self.split = self.settings['split']
         if self.settings['sample_data'] is not None:
             self.sample_file = self.settings['sample_data']
             self.checkfiles('meta')
@@ -537,7 +540,7 @@ class InputPanel(wx.Panel):
                 except(TypeError, KeyError, ValueError, BiomParseException):
                     wx.LogError(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file!')
                     logger.error(str(x) + ' and ' + str(z) + ' cannot be combined into a BIOM file! ', exc_info=True)
-            pub.sendMessage('input_metadata', msg=meta_dict)
+            pub.sendMessage('input_metadata', msg=(meta_dict, self.split))
         if filetype is 'network':
             try:
                 nets_object = get_input(self.settings)

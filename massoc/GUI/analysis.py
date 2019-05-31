@@ -12,6 +12,7 @@ from threading import Thread
 import wx
 from wx.lib.pubsub import pub
 from massoc.scripts.main import run_netstats, run_metastats
+from massoc.scripts.batch import read_settings
 from massoc.scripts.netbase import ImportDriver
 from time import sleep
 from copy import deepcopy
@@ -432,9 +433,13 @@ def data_viewer(inputs):
     """
     Gets metadata variables and network names from database.
     """
+    old_inputs = read_settings(inputs['fp'] + '/settings.json')
+    old_inputs.update(inputs)
+    inputs = old_inputs
     netdriver = ImportDriver(user=inputs['username'],
                              password=inputs['password'],
-                             uri=inputs['address'])
+                             uri=inputs['address'],
+                             filepath=inputs['fp'])
     meta = netdriver.custom_query(query="MATCH (n:Property)--(Sample) RETURN n.type")
     meta = set([x[y] for x in meta for y in x])
     networks = netdriver.custom_query(query="MATCH (n:Network) RETURN n.name")

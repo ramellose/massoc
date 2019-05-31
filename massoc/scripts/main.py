@@ -222,9 +222,8 @@ def get_input(inputs, publish=False):
         logger.info('BIOM files written to disk.  ')
     except Exception:
         logger.warning('Failed to write BIOM files to disk.  ', exc_info=True)
-    if not publish:
-        write_settings(bioms.inputs)
-        logger.info('Settings file written to disk.  ')
+    write_settings(bioms.inputs)
+    logger.info('Settings file written to disk.  ')
 
 
 def run_network(inputs, publish=False):
@@ -453,13 +452,14 @@ def run_netstats(inputs, publish=False):
                 pub.sendMessage('update', msg="Exporting network...")
             for file in pairlist:
                 if inputs['networks'] is not None:
+                    names = [x.split('.')[0] for x in inputs['networks']]
                     importdriver.export_network(path=inputs['fp'] + '/' +
-                                                file + '_' + "_".join(inputs['networks']) + '.graphml',
+                                                file + '_' + "_".join(names) + '.graphml',
                                                 pairlist=pairlist[file])
                     logger.info("Exporting networks to: " + inputs['fp'] + '/' +
-                                file + '_' + "_".join(inputs['networks']) + '.graphml')
+                                file + '_' + "_".join(names) + '.graphml')
                     checks += "Exporting networks to: " + inputs['fp'] + '/' +\
-                              file + '_' + "_".join(inputs['networks']) + '.graphml' "\n"
+                              file + '_' + "_".join(names) + '.graphml' "\n"
                 else:
                     importdriver.export_network(path=inputs['fp'] + '/' +
                                                      file + '_complete.graphml',
@@ -480,8 +480,7 @@ def run_netstats(inputs, publish=False):
     if publish:
         pub.sendMessage('database_log', msg=checks)
     logger.info('Completed netstats operations!  ')
-    if not publish:
-        write_settings(inputs)
+    write_settings(inputs)
 
 
 def run_metastats(inputs, publish=False):
@@ -537,8 +536,7 @@ def run_metastats(inputs, publish=False):
     if publish:
         pub.sendMessage('database_log', msg=checks)
     logger.info('Completed metastats operations!  ')
-    if not publish:
-        write_settings(inputs)
+    write_settings(inputs)
 
 
 def resource_path(relative_path):

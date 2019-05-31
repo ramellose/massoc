@@ -451,7 +451,7 @@ def data_starter(inputs):
     run_neo4j(inputs, publish=True)
     # get PID setting
     settings = read_settings(inputs['fp'] + '/settings.json')
-    new_pid = inputs['pid']
+    new_pid = settings['pid']
     pub.sendMessage('pid', msg=new_pid)
     pub.sendMessage('update', msg='Completed database operations!')
 
@@ -469,7 +469,7 @@ def data_clear(inputs):
     run_neo4j(inputs, publish=True)
     # get PID setting
     settings = read_settings(inputs['fp'] + '/settings.json')
-    new_pid = inputs['pid']
+    new_pid = settings['pid']
     pub.sendMessage('pid', msg=new_pid)
     pub.sendMessage('update', msg='Completed database operations!')
 
