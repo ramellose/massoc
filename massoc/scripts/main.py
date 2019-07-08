@@ -162,29 +162,34 @@ def get_input(inputs, publish=False):
         bioms.cluster_biom()
     if inputs['split'] is not None and inputs['split'] is not 'TRUE':
         bioms.split_biom()
+    logger.info('Collapsing taxonomy... ')
+    bioms.collapse_tax()
     if inputs['min'] is not None:
         if publish:
             pub.sendMessage('update', msg='Setting minimum mean abundance...')
         logger.info('Removing taxa below minimum count... ')
         bioms.prev_filter(mode='min')
-    if inputs['rar'] is not None:
-        if publish:
-            pub.sendMessage('update', msg='Rarefying counts...')
-        logger.info('Rarefying counts... ')
-        bioms.rarefy()
     if inputs['prev'] is not None:
         if publish:
             pub.sendMessage('update', msg='Setting prevalence filter...')
         logger.info('Setting prevalence filter... ')
         bioms.prev_filter(mode='prev')
-    logger.info('Collapsing taxonomy... ')
-    bioms.collapse_tax()
+    if inputs['rar'] is not None:
+        if publish:
+            pub.sendMessage('update', msg='Rarefying counts...')
+        logger.info('Rarefying counts... ')
+        bioms.rarefy()
     bioms.inputs['procbioms'] = dict()
     for level in bioms.inputs['levels']:
         bioms.inputs['procbioms'][level] = dict()
         for name in bioms.inputs['name']:
             biomname = bioms.inputs['fp'] + '/' + name + '_' + level + '.hdf5'
             bioms.inputs['procbioms'][level][name] = biomname
+    all_bioms = {**bioms.otu, **bioms.genus, **bioms.family, **bioms.order,
+                 **bioms.class_, **bioms.phylum}
+    for biomfile in all_bioms:
+        if all_bioms[biomfile].shape[0] == 1:
+            logger.error("The current preprocessing steps resulted in BIOM files with only 1 row.", exc_info=True)
     if inputs['network'] is not None:
         if publish:
             pub.sendMessage('update', msg='Checking previously generated networks...')
@@ -230,11 +235,11 @@ def run_network(inputs, publish=False):
     """
     Pipes functions from the different massoc modules to run complete network inference.
     """
+    _create_logger(inputs['fp'])
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
     old_inputs.update(inputs)
     inputs = old_inputs
     # handler to file
-    _create_logger(inputs['fp'])
     filestore = read_bioms(inputs['procbioms'])
     bioms = Batch(filestore, inputs)
     bioms = Nets(bioms)
@@ -263,10 +268,10 @@ def run_network(inputs, publish=False):
 
 
 def run_neo4j(inputs, publish=False):
+    _create_logger(inputs['fp'])
     # overwritten settings should be retained
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
     # handler to file
-    _create_logger(inputs['fp'])
     # check if password etc is already there
     if 'username' in old_inputs:
         logins = dict((k, old_inputs[k]) for k in ('username', 'password', 'address', 'neo4j'))
@@ -395,7 +400,6 @@ def run_neo4j(inputs, publish=False):
             importdriver = ImportDriver(user=inputs['username'],
                                         password=inputs['password'],
                                         uri=inputs['address'], filepath=inputs['fp'])
-            node_dict = dict()
             # create dictionary from file
             for filepath in inputs['add']:
                 with open(filepath, 'r') as file:
@@ -403,13 +407,12 @@ def run_neo4j(inputs, publish=False):
                     # Newline is cutoff
                     colnames = file.readline().split(sep="\t")
                     label = colnames[0].rstrip()
-                    name = colnames[1].rstrip()
-                    for line in file:
-                        source = line.split(sep="\t")[0].rstrip()
-                        target = line.split(sep="\t")[1].rstrip()
-                        node_dict[source] = target
-                importdriver.include_nodes(nodes=inputs['add'], name=name, label=label)
-                importdriver.close()
+                    # if the supplied file is a dataframe,
+                    # treat first column as source and rest as target
+                    for i in range(1, len(colnames)):
+                        name = colnames[i].rstrip()
+                        importdriver.include_nodes(nodes=inputs['add'], name=name, label=label)
+                        importdriver.close()
         except Exception:
             logger.warning("Failed to upload properties to database.  ", exc_info=True)
     logger.info('Completed database operations!  ')

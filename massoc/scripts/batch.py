@@ -240,62 +240,69 @@ class Batch(object):
         After OTUs are filtered for prevalence,
         higher taxonomic levels are updated to reflect this.
         """
-        for x in list(self.otu):
-            data = self.otu[x].matrix_data
-            data = csr_matrix.todense(data)
-            keep_otus = list()
-            binotu = None
-            try:
-                if mode == 'prev':  # calculates prevalence
-                    fracs = np.count_nonzero(data, axis=1)
-                    nsamples = data.shape[1]
-                    fracs = fracs / nsamples
-                    for y in range(0, len(fracs)):
-                        if fracs[y] >= (float(self.inputs['prev'])/100):
-                            keep_otus.append(self.otu[x]._observation_ids[y])
-                        else:
-                            binotu = self.otu[x]._observation_ids[y]
-                    if binotu is not None and 'Bin' not in keep_otus:
-                        keep_otus.append(binotu)
-            except Exception:
-                logger.error("Could not set prevalence filter", exc_info=True)
-            try:
-                if mode == 'min':
-                    mincount = np.sum(data, axis=1)
-                    for y in range(0, len(mincount)):
-                        if mincount[y] >= (int(self.inputs['min'])):
-                            keep_otus.append(self.otu[x]._observation_ids[y])
-                        else:
-                            binotu = self.otu[x]._observation_ids[y]
+        all_bioms = {'otu': self.otu, 'genus': self.genus,
+                     'family': self.family, 'order': self.order,
+                     'class': self.class_, 'phylum': self.phylum}
+        for level in all_bioms:
+            for name in all_bioms[level]:
+                data = all_bioms[level][name].matrix_data
+                data = csr_matrix.todense(data)
+                keep_otus = list()
+                binotu = None
+                try:
+                    if mode == 'prev':  # calculates prevalence
+                        fracs = np.count_nonzero(data, axis=1)
+                        nsamples = data.shape[1]
+                        fracs = fracs / nsamples
+                        for y in range(0, len(fracs)):
+                            if fracs[y] >= (float(self.inputs['prev'])/100):
+                                keep_otus.append(all_bioms[level][name]._observation_ids[y])
+                            else:
+                                binotu = all_bioms[level][name]._observation_ids[y]
+                        if binotu is not None and 'Bin' not in keep_otus:
+                            keep_otus.append(binotu)
+                except Exception:
+                    logger.error("Could not set prevalence filter", exc_info=True)
+                try:
+                    if mode == 'min':
+                        mincount = np.sum(data, axis=1)
+                        for y in range(0, len(mincount)):
+                            if mincount[y] >= (int(self.inputs['min'])):
+                                keep_otus.append(all_bioms[level][name]._observation_ids[y])
+                            else:
+                                binotu = all_bioms[level][name]._observation_ids[y]
+                        if binotu is not None:
+                            keep_otus.append(binotu)
+                except Exception:
+                    logger.error("Could not set a minimum count filter", exc_info=True)
+                keep = all_bioms[level][name].filter(keep_otus, axis="observation", inplace=False)
+                try:
                     if binotu is not None:
-                        keep_otus.append(binotu)
-            except Exception:
-                logger.error("Could not set a minimum count filter", exc_info=True)
-            keep = self.otu[x].filter(keep_otus, axis="observation", inplace=False)
-            try:
-                if binotu is not None:
-                    bin = self.otu[x].filter(keep_otus[:-1], axis="observation", inplace=False, invert=True)
-                    binsums = np.sum(bin.matrix_data, axis=0) # sums all binned OTUs
-                    # need to recreate keep._data as lil matrix, is more efficient
-                    orig = keep._data.tolil(copy=True)
-                    if 'Bin' not in keep_otus:
-                        bin_id = keep._obs_index[binotu]
-                        orig[bin_id] = binsums
-                        keep._observation_ids[bin_id] = "Bin"
-                        keep._obs_index["Bin"] = keep._obs_index.pop(binotu)
-                    if 'Bin' in keep_otus:  # necessary to prevent duplicate Bin ID
-                        old_bin_id = keep._obs_index["Bin"]
-                        old_bin_sums = keep._data[old_bin_id]
-                        new_bin_sums = binsums + old_bin_sums
-                        orig[old_bin_id] = new_bin_sums
-                    # update keep._data with orig
-                    keep._data = orig.tocsr()
-            except Exception:
-                logger.error("Could not preserve binned taxa", exc_info=True)
-            self.otu[x] = keep
-        if len(self.genus) > 0:
-            self.collapse_tax()
-
+                        bin = all_bioms[level][name].filter(keep_otus[:-1], axis="observation", inplace=False, invert=True)
+                        binsums = np.sum(bin.matrix_data, axis=0) # sums all binned OTUs
+                        # need to recreate keep._data as lil matrix, is more efficient
+                        orig = keep._data.tolil(copy=True)
+                        if 'Bin' not in keep_otus:
+                            bin_id = keep._obs_index[binotu]
+                            orig[bin_id] = binsums
+                            keep._observation_ids[bin_id] = "Bin"
+                            keep._obs_index["Bin"] = keep._obs_index.pop(binotu)
+                        if 'Bin' in keep_otus:  # necessary to prevent duplicate Bin ID
+                            old_bin_id = keep._obs_index["Bin"]
+                            old_bin_sums = keep._data[old_bin_id]
+                            new_bin_sums = binsums + old_bin_sums
+                            orig[old_bin_id] = new_bin_sums
+                        # update keep._data with orig
+                        keep._data = orig.tocsr()
+                except Exception:
+                    logger.error("Could not preserve binned taxa", exc_info=True)
+                all_bioms[level][name] = keep
+        self.otu = all_bioms['otu']
+        self.genus = all_bioms['genus']
+        self.family = all_bioms['family']
+        self.order = all_bioms['order']
+        self.class_ = all_bioms['class']
+        self.phylum = all_bioms['phylum']
 
     def rarefy(self):
         """
@@ -304,26 +311,36 @@ class Batch(object):
         samples with reads lower than this read depth are removed,
         and then samples are rarefied to equal depth.
         """
-        batchcopy = deepcopy(self)
-        for x in list(self.otu):
-            try:
-                if self.inputs['rar'] == 'True':
-                    lowest_count = int(min(self.otu[x].sum(axis='sample')))
-                else:
-                    lowest_count = int(self.inputs['rar'])
-                data = self.otu[x].matrix_data
-                data = csr_matrix.todense(data)
-                keep_samples = list()
-                mincount = np.sum(data, axis=0)
-                for y in range(mincount.shape[1]):
-                    if mincount.item(y) >= lowest_count:
-                        keep_samples.append(self.otu[x]._sample_ids[y])
-                keep = self.otu[x].filter(keep_samples, axis="sample", inplace=False)
-                batchcopy.otu[x] = keep.subsample(n=lowest_count, axis='sample')
-            except Exception:
-                logger.error("Unable to rarefy file", exc_info=True)
-            for x in list(self.otu):
-                self.otu[x] = batchcopy.otu[x]
+        all_bioms = {'otu': self.otu, 'genus': self.genus,
+                     'family': self.family, 'order': self.order,
+                     'class': self.class_, 'phylum': self.phylum}
+        batchcopy = deepcopy(all_bioms)
+        for level in all_bioms:
+            for name in all_bioms[level]:
+                try:
+                    if self.inputs['rar'] == 'True':
+                        lowest_count = int(min(all_bioms[level][name].sum(axis='sample')))
+                    else:
+                        lowest_count = int(self.inputs['rar'])
+                    data = all_bioms[level][name].matrix_data
+                    data = csr_matrix.todense(data)
+                    keep_samples = list()
+                    mincount = np.sum(data, axis=0)
+                    for y in range(mincount.shape[1]):
+                        if mincount.item(y) >= lowest_count:
+                            keep_samples.append(all_bioms[level][name]._sample_ids[y])
+                    keep = all_bioms[level][name].filter(keep_samples, axis="sample", inplace=False)
+                    batchcopy[level][name] = keep.subsample(n=lowest_count, axis='sample')
+                except Exception:
+                    logger.error("Unable to rarefy file", exc_info=True)
+                for name in list(all_bioms[level]):
+                    all_bioms[level][name] = batchcopy[level][name]
+        self.otu = all_bioms['otu']
+        self.genus = all_bioms['genus']
+        self.family = all_bioms['family']
+        self.order = all_bioms['order']
+        self.class_ = all_bioms['class']
+        self.phylum = all_bioms['phylum']
 
     def split_biom(self, mode="sample", *args):
         """

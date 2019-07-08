@@ -11,7 +11,6 @@
 #' @param o output filename + path
 #' @example spieceasi.R -fp <filepath> -o <filepath>
 #' @export
-
 require(biomformat)
 require(SpiecEasi)
 require(docopt)

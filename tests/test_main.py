@@ -17,7 +17,7 @@ from pathlib import Path
 from biom.cli.util import write_biom_table
 from subprocess import call
 import massoc
-from run_massoc import get_input, run_network, \
+from massoc.scripts.main import get_input, run_network, \
     run_neo4j, run_netstats
 random.seed(7)
 
