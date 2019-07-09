@@ -170,7 +170,7 @@ class ImportDriver(object):
         except Exception:
             logger.error("Could not write BIOM file to database. \n", exc_info=True)
 
-    def include_nodes(self, nodes, name, label):
+    def include_nodes(self, nodes, name, label, check=True):
         """
         Given a named dictionary, this function tries to upload
         the file to the Neo4j database.
@@ -182,15 +182,17 @@ class ImportDriver(object):
         :param nodes: Dictionary of existing nodes as values with node names as keys
         :param name: Name of variable, inserted in Neo4j graph database as type
         :param label: Label of source node (e.g. Taxon, Sample, Property, Experiment etc)
+        :param check: If True, checks if all source nodes appear in the database.
         :return:
         """
         # first step:
         # check whether key values in node dictionary exist in network
-        with self._driver.session() as session:
-            matches = session.read_transaction(self._find_nodes, list(nodes.keys()))
-            if not matches:
-                logger.warning('No source nodes are present in the network. \n')
-                sys.exit()
+        if check:
+            with self._driver.session() as session:
+                matches = session.read_transaction(self._find_nodes, list(nodes.keys()))
+                if not matches:
+                    logger.warning('No source nodes are present in the network. \n')
+                    sys.exit()
         with self._driver.session() as session:
             for node in nodes:
                 session.write_transaction(self._create_property,

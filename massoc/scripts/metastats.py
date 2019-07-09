@@ -357,7 +357,7 @@ class MetaDriver(object):
                 sequence = lines[i + 1].rstrip()
                 sequence_dict[otu] = sequence
         # with the sequence list, run include_nodes
-        driver.include_nodes(sequence_dict, name="16S", label="Taxon")
+        driver.include_nodes(sequence_dict, name="16S", label="Taxon", check=False)
 
     @staticmethod
     def _query(tx, query):
