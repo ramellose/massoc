@@ -572,6 +572,16 @@ def run_metastats(inputs, publish=False):
         logger.warning("Failed to carry out edge agglomeration.  ", exc_info=True)
         checks += 'Failed to carry out edge agglomeration. \n'
     try:
+        # write operations here
+        if inputs['sequence']:
+                logger.info("Uploading 16S sequences...")
+                metadriver.include_sequences(inputs['sequence'], importdriver)
+                checks += 'Uploaded 16S sequences. \n'
+    except Exception:
+        logger.warning("Failed to upload 16S sequences.  ", exc_info=True)
+        checks += 'Failed to upload 16S sequences. \n'
+
+    try:
         if inputs['variable']:
             logger.info("Associating samples...  ")
             pub.sendMessage('update', msg="Associating samples...")

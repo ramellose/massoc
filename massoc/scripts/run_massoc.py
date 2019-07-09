@@ -367,6 +367,11 @@ metastatsparser.add_argument('-fp', '--output_filepath',
                              dest='fp',
                              help='Filepath for saving output files and reading settings.',
                              default=os.getcwd())
+metastatsparser.add_argument('-s', '--sequence',
+                             dest='sequence',
+                             required=False,
+                             type=str,
+                             help='Location of 16S sequences (e.g. GreenGenes folder containing FASTA files).')
 metastatsparser.set_defaults(metastats=True)
 
 
