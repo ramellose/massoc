@@ -147,7 +147,7 @@ class ImportDriver(object):
                                                           source=taxon, sourcetype='Taxon',
                                                           target=meta[key], name=key)
                 for sample in biomfile.ids(axis='sample'):
-                    session.write_transaction(self._create_sample, sample, exp_id, biomfile)
+                    session.write_transaction(self._create_sample, sample, exp_id)
                     sample_index = biomfile.index(axis='sample', id=sample)
                     if sample_meta:
                         meta = biomfile.metadata(axis='sample')[sample_index]
