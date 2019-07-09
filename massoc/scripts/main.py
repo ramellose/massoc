@@ -415,6 +415,7 @@ def run_neo4j(inputs, publish=False):
             start_database(inputs, publish)
             existing_pid = True
         try:
+            logger.info('Uploading additional properties...  ')
             if publish:
                 pub.sendMessage('update', msg='Uploading files to database...')
             importdriver = ImportDriver(user=inputs['username'],
@@ -438,7 +439,7 @@ def run_neo4j(inputs, publish=False):
                         name = colnames[i].rstrip()
                         for line in lines:
                             source = line.split(sep="\t")[0].rstrip()
-                            target = line.split(sep="\t")[1].rstrip()
+                            target = line.split(sep="\t")[i].rstrip()
                             node_dict[source] = target
                         importdriver.include_nodes(nodes=node_dict, name=name, label=label)
             importdriver.close()
