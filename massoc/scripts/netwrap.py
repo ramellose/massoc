@@ -120,7 +120,6 @@ class Nets(Batch):
                 otu[value] = otutab
             self.otu = otu
         self.networks = dict()
-        self.names = list(self.otu)
         if self.inputs:
             _create_logger(self.inputs['fp'])
         if type(self.otu) is not dict:
@@ -529,7 +528,7 @@ def get_joblist(nets):
     :return: Dictionary of dictionary of jobs
     """
     joblist = list()
-    for name in nets.names:
+    for name in nets.inputs['name']:
         for level in nets.inputs['levels']:
             sublist = dict()
             if nets.inputs['tools']:
