@@ -190,7 +190,7 @@ class ImportDriver(object):
             matches = session.read_transaction(self._find_nodes, list(nodes.keys()))
             if not matches:
                 logger.warning('No source nodes are present in the network. \n')
-                exit()
+                sys.exit()
         with self._driver.session() as session:
             for node in nodes:
                 session.write_transaction(self._create_property,
