@@ -37,6 +37,15 @@ import logging.handlers
 class ImportDriver(object):
 
     def __init__(self, uri, user, password, filepath):
+        """
+        Initializes a driver for accessing the Neo4j database.
+        This driver constructs the Neo4j database and uploads extra data.
+
+        :param uri: Adress of Neo4j database
+        :param user: Username for Neo4j database
+        :param password: Password for Neo4j database
+        :param filepath: Filepath where logs will be written.
+        """
         _create_logger(filepath)
         try:
             self._driver = GraphDatabase.driver(uri, auth=(user, password))
@@ -45,11 +54,17 @@ class ImportDriver(object):
             exit()
 
     def close(self):
-        """Closes the connection to the database."""
+        """
+        Closes the connection to the database.
+        :return:
+        """
         self._driver.close()
 
     def clear_database(self):
-        """Clears the entire database."""
+        """
+        Clears the entire database.
+        :return:
+        """
         try:
             with self._driver.session() as session:
                 session.write_transaction(self._delete_all)
@@ -57,26 +72,27 @@ class ImportDriver(object):
             logger.error("Could not clear database. \n", exc_info=True)
 
     def custom_query(self, query):
-        """Accepts a query and provides the results."""
+        """
+        Accepts a query and provides the results.
+        :param query: String containing Cypher query
+        :return: Results of transaction with Cypher query
+        """
+        output = None
         try:
             with self._driver.session() as session:
                 output = session.read_transaction(self._query, query)
-            return output
         except Exception:
             logger.error("Unable to execute query: " + query + '\n', exc_info=True)
+        return output
 
-    def add_data(self, filename):
-        """
-        Given a filename of an edge list
-        :param filename:
-        :return:
-        """
-
-    def convert_nets(self, nets, mode=None):
+    def convert_nets(self, nets):
         """
         Converts Nets object from netwrap.py to a Neo4J graph.
         This graph can be stored more easily in a database,
         and supports future metadata-based utilities.
+
+        :param nets: Nets object
+        :return:
         """
         try:
             for exp_id in nets.inputs['name']:
@@ -90,6 +106,15 @@ class ImportDriver(object):
             logger.error("Could not port network object to database. \n", exc_info=True)
 
     def convert_networkx(self, network_id, network, exp_id=None, log=None, mode=None):
+        """
+        Uploads NetworkX object to Neo4j database.
+        :param network_id: Name for network node.
+        :param network: NetworkX object.
+        :param exp_id: Name of experiment used to generate network.
+        :param log: Log of steps carried out to generate network
+        :param mode: if 'weight, weighted associations are uploaded
+        :return:
+        """
         try:
             with self._driver.session() as session:
                 session.write_transaction(self._create_network, network_id, exp_id, log)
@@ -100,6 +125,10 @@ class ImportDriver(object):
     def convert_biom(self, biomfile, exp_id):
         """
         Stores a BIOM object in the database.
+
+        :param biomfile: BIOM file.
+        :param exp_id: Label of experiment used to generate BIOM file.
+        :return:
         """
         try:
             # first check if sample metadata exists
@@ -149,6 +178,7 @@ class ImportDriver(object):
         already present in the Neo4j graph database,
         while the second column reflects node names that will be added.
         The column names are used to assign node types to the new metadata.
+
         :param nodes: Dictionary of existing nodes as values with node names as keys
         :param label: Label of source node (e.g. Taxon, Sample, Property, Experiment etc)
         :param name: Name of variable, inserted in Neo4j graph database as type
@@ -160,7 +190,7 @@ class ImportDriver(object):
             matches = session.read_transaction(self._find_nodes, list(nodes.keys()))
             if not matches:
                 logger.warning('No source nodes are present in the network. \n')
-                exit(1)
+                exit()
         with self._driver.session() as session:
             for node in nodes:
                 session.write_transaction(self._create_property,
@@ -168,6 +198,12 @@ class ImportDriver(object):
                                           target=nodes[node], name=name)
 
     def export_network(self, path, pairlist=None):
+        """
+        Writes network to graphML file.
+        :param path: Filepath where network is written to.
+        :param pairlist: List of associations to write to disk.
+        :return:
+        """
         # mode = sample removed
         try:
             g = nx.MultiGraph()
@@ -232,9 +268,12 @@ class ImportDriver(object):
             logger.error("Could not write database graph to GraphML file. \n", exc_info=True)
 
     def create_association_relationships(self):
-        """For each association, a link is created from 1 taxon to another,
+        """
+        For each association, a link is created from 1 taxon to another,
         with the weight as edge weight. The returned subgraph
-        is similar to graphs that are returned by CoNet and SPIEC-EASI directly. """
+        is similar to graphs that are returned by CoNet and SPIEC-EASI directly.
+        :return:
+        """
         try:
             with self._driver.session() as session:
                 network = session.write_transaction(self._create_rel_assoc)
@@ -245,21 +284,35 @@ class ImportDriver(object):
 
     @staticmethod
     def _delete_all(tx):
-        """Deletes all nodes and their relationships from the database."""
+        """
+        Deletes all nodes and their relationships from the database.
+        :param tx: Neo4j transaction
+        :return:
+        """
         tx.run("MATCH (n) DETACH DELETE n")
 
     @staticmethod
     def _query(tx, query):
-        """Processes custom queries."""
+        """
+        Processes custom queries.
+        :param tx: Neo4j transaction
+        :param query: String of Cypher query
+        :return: Outcome of transaction
+        """
         results = tx.run(query).data()
         return results
 
     @staticmethod
     def _create_rel_assoc(tx):
-        """Requests all associations, and then generates a new relationship
+        """
+        Requests all associations, and then generates a new relationship
         that 'shortcuts' between the taxa. This relationship is
         directed, because the database is directed, so queries
-        should be treating them like undirected relationships."""
+        should be treating them like undirected relationships.
+
+        :param tx: Neo4j transaction
+        :return:
+        """
         assocs = tx.run("MATCH (n:Association) RETURN n").data()
         for assoc in assocs:
             nodes = tx.run(("MATCH (m)--(:Association {name: '" +
@@ -275,14 +328,27 @@ class ImportDriver(object):
 
     @staticmethod
     def _create_experiment(tx, exp_id):
-        """Creates a node that represents the Experiment ID."""
+        """
+        Creates a node that represents the Experiment ID.
+
+        :param tx: Neo4j transaction
+        :param exp_id: Label for experiment
+        :return:
+        """
         tx.run("CREATE (a:Experiment) SET a.name = $id", id=exp_id)
 
     @staticmethod
     def _create_taxon(tx, taxon, biomfile):
-        """Creates a node that represents a taxon.
+        """
+        Creates a node that represents a taxon.
         Also generates taxonomy nodes + connects them, and
-        includes metadata. """
+        includes metadata.
+
+        :param tx: Neo4j transaction
+        :param taxon: ID for taxon
+        :param biomfile: BIOM file containing count data.
+        :return:
+        """
         # first check if OTU already exists
         hit = tx.run(("MATCH (a:Taxon {name: '" + taxon +
                       "'}) RETURN a")).data()
@@ -337,8 +403,15 @@ class ImportDriver(object):
                 tx.run("CREATE (a:Taxon) SET a.name = $id", id='Bin')
 
     @staticmethod
-    def _create_sample(tx, sample, exp_id, biomfile):
-        """Creates sample nodes and related metadata."""
+    def _create_sample(tx, sample, exp_id):
+        """
+        Creates sample nodes and related metadata.
+
+        :param tx: Neo4j transaction
+        :param sample: Sample name
+        :param exp_id: Experiment name
+        :return:
+        """
         tx.run("CREATE (a:Sample) SET a.name = $id", id=sample)
         tx.run(("MATCH (a:Sample), (b:Experiment) "
                 "WHERE a.name = '" + sample +
@@ -351,7 +424,8 @@ class ImportDriver(object):
         """
         Creates target node if it does not exist yet
         and adds the relationship between target and source.
-        :param tx: Transaction
+
+        :param tx: Neo4j transaction
         :param source: Source node, should exist in database
         :param target: Target node
         :param name: Type variable of target node
@@ -384,8 +458,14 @@ class ImportDriver(object):
 
     @staticmethod
     def _create_observations(tx, observation):
-        """Creates relationships between taxa and samples
-        that represent the count number of that taxon in a sample."""
+        """
+        Creates relationships between taxa and samples
+        that represent the count number of that taxon in a sample.
+
+        :param tx: Neo4j transaction
+        :param observation: An observation (count) of a taxon in a sample.
+        :return:
+        """
         taxon, sample, value = observation
         tx.run(("MATCH (a:Taxon), (b:Sample) "
                 "WHERE a.name = '" + taxon +
@@ -396,8 +476,16 @@ class ImportDriver(object):
 
     @staticmethod
     def _create_network(tx, network, exp_id=None, log=None):
-        """Generates a network node with provenance for every network
-        stored in a Nets object."""
+        """
+        Generates a network node with provenance for every network
+        stored in a Nets object.
+
+        :param tx: Neo4j transaction
+        :param network: Network name
+        :param exp_id: Experiment name
+        :param log: Dictionary of operations carried out to generate network
+        :return:
+        """
         tx.run("CREATE (a:Network) "
                "SET a.name = $id "
                "RETURN a", id=network)
@@ -431,9 +519,17 @@ class ImportDriver(object):
 
     @staticmethod
     def _create_associations(tx, name, network, mode=None):
-        """Generates all the associations contained in a network and
+        """
+        Generates all the associations contained in a network and
         connects them to the related network node.
-        This function uses NetworkX networks as source."""
+        This function uses NetworkX networks as source.
+
+        :param tx: Neo4j transaction
+        :param name: Network name
+        :param network: NetworkX object
+        :param mode: if 'weight', edge weights are uploaded
+        :return:
+        """
         # creates metadata for eventual CoNet feature associations
         for edge in network.edges:
             taxon1 = edge[0]
@@ -460,8 +556,8 @@ class ImportDriver(object):
                                   attr['interactionType'] + "' RETURN a")).data()
                     if len(hit) == 0:
                         tx.run(("CREATE (a:Property) SET a.type = '" +
-                                      taxon1 + "' SET a.name = '" +
-                                      attr['interactionType'] + "'"))
+                                taxon1 + "' SET a.name = '" +
+                                attr['interactionType'] + "'"))
                     tx.run(("MATCH (a:Taxon), (b:Property) WHERE a.name = '" + taxon2 +
                             "' AND b.type ='" + taxon1 +
                             "' AND b.name = '" + attr['interactionType'] +
@@ -475,8 +571,8 @@ class ImportDriver(object):
                                   attr['interactionType'] + "' RETURN a")).data()
                     if len(hit) == 0:
                         tx.run(("CREATE (a:Property) SET a.type = '" +
-                                      taxon2 + "' SET a.name = '" +
-                                      attr['interactionType'] + "'"))
+                                taxon2 + "' SET a.name = '" +
+                                attr['interactionType'] + "'"))
                     tx.run(("MATCH (a:Taxon), (b:Property) WHERE a.name = '" + taxon1 +
                             "' AND b.type ='" + taxon2 +
                             "' AND b.name = '" + attr['interactionType'] +
@@ -548,7 +644,12 @@ class ImportDriver(object):
 
     @staticmethod
     def _association_list(tx):
-        """Returns a list of associations, as taxon1, taxon2, and, if present, weight. """
+        """
+        Returns a list of associations, as taxon1, taxon2, and, if present, weight.
+
+        :param tx: Neo4j transaction
+        :return: List of lists with source and target nodes, source networks and edge weights.
+        """
         associations = tx.run(("MATCH (n:Association) RETURN n")).data()
         edge_list = list()
         for assoc in associations:
@@ -577,7 +678,12 @@ class ImportDriver(object):
 
     @staticmethod
     def _sample_list(tx):
-        """Returns a list of sample occurrences, as taxon, sample and count."""
+        """
+        Returns a list of sample occurrences, as taxon, sample and count.
+
+        :param tx: Neo4j transaction
+        :return: List of samples
+        """
         tax_nodes = tx.run("MATCH (n)--(:Association) WHERE n:Taxon RETURN n")
         tax_nodes = _get_unique(tax_nodes, 'n')
         edge_list = list()
@@ -596,7 +702,12 @@ class ImportDriver(object):
 
     @staticmethod
     def _agglom_list(tx):
-        """Returns a list of relationships between agglomerated taxa and taxa."""
+        """
+        Returns a list of relationships between agglomerated taxa and taxa.
+
+        :param tx: Neo4j transaction
+        :return: List of nodes labeled Agglom_Taxon
+        """
         agglom_nodes = tx.run("MATCH (n:Agglom_Taxon) RETURN n")
         agglom_nodes = _get_unique(agglom_nodes, 'n')
         edge_list = list()
@@ -612,10 +723,17 @@ class ImportDriver(object):
 
     @staticmethod
     def _find_nodes(tx, names):
-        """Returns True if all nodes in the 'names' list are found in the database."""
+        """
+        Returns True if all nodes in the 'names' list are found in the database.
+
+        :param tx: Neo4j transaction
+        :param names: List of names of nodes
+        :return:
+        """
         for name in names:
             netname = tx.run("MATCH (n {name: '" + name +
                              "'}) RETURN n").data()
+            netname = _get_unique(netname, key='n')
             # only checking node name; should be unique in database!
             found = True
             if len(netname) == 0:
@@ -626,7 +744,12 @@ class ImportDriver(object):
 
     @staticmethod
     def _tax_dict(tx):
-        """Returns a dictionary of taxonomic values for each node. """
+        """
+        Returns a dictionary of taxonomic values for each node.
+
+        :param tx: Neo4j transaction
+        :return: Dictionary of taxonomy separated by taxon
+        """
         taxa = tx.run("MATCH (n)--(:Association) WHERE n:Taxon OR n:Agglom_Taxon RETURN n").data()
         taxa = _get_unique(taxa, 'n')
         tax_dict = dict()
@@ -646,7 +769,12 @@ class ImportDriver(object):
 
     @staticmethod
     def _tax_properties(tx):
-        """Returns a dictionary of taxon / sample properties, to be included as taxon metadata."""
+        """
+        Returns a dictionary of taxon / sample properties, to be included as taxon metadata.
+
+        :param tx: Neo4j transaction
+        :return: Dictionary of dictionary of taxon properties
+        """
         taxa = tx.run("MATCH (n)--(:Association) WHERE n:Taxon OR n:Agglom_Taxon RETURN n").data()
         taxa = _get_unique(taxa, 'n')
         properties = dict()
@@ -676,8 +804,13 @@ class ImportDriver(object):
 
 
 def _create_logger(filepath):
-    """ After a filepath has become available, loggers can be created
-    when required to report on errors. """
+    """
+    After a filepath has become available, loggers can be created
+    when required to report on errors.
+
+    :param filepath: Filepath where logs will be written.
+    :return:
+    """
     logpath = filepath + '/massoc.log'
     # filelog path is one folder above massoc
     # pyinstaller creates a temporary folder, so log would be deleted

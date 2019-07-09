@@ -95,6 +95,14 @@ class Batch(object):
     """
 
     def __init__(self, counts=None, inputs=None):
+        """
+        Initializes the Batch object.
+
+        :param counts: Dictionary of dictionary of BIOM files.
+        The first-level dictionary has taxonomic levels as keys, the second names.
+        :param inputs: Dictionary of inputs.
+        :return:
+        """
         self.otu = {}
         self.species = {}
         self.genus = {}
@@ -126,6 +134,8 @@ class Batch(object):
         The collapse_tax function allows users to generate BIOM files
         containing agglomerated data. This means network analysis can be
         performed simultaneously on genus, order and other taxonomic levels.
+
+        :return:
         """
         try:
             if 'species' in self.inputs['levels']:
@@ -157,6 +167,8 @@ class Batch(object):
         filenames follow a standard format. This function retrieves such filenames
         so BIOM files can be read without requiring them to be stated explicitly
         by the user.
+
+        :return:
         """
         try:
             filenames = dict()
@@ -177,6 +189,9 @@ class Batch(object):
         in a Batch object to HDF5 files.
         OTU files are always written to disk,
         the rest only if required.
+
+        :param fmt: Format for writing; 'hdf5' or 'json'.
+        :return:
         """
         for x in self.inputs['name']:
             filename = self.inputs['fp'] + '/' + x + '_otu.hdf5'
@@ -210,6 +225,9 @@ class Batch(object):
         a clr transform on all OTU tables in a Batch object.
         It returns a deep copy of the original Batch object,
         so the original file is not modified.
+
+        :param mode: transformation mode; clr (centered log-ratio) or ilr (isometric log-ratio)
+        :return: Transformed copy of Batch object.
         """
         batchcopy = copy.deepcopy(self)
         try:
@@ -234,11 +252,15 @@ class Batch(object):
 
     def prev_filter(self, mode='prev'):
         """
-        Filters all OTUs in a Batch.otu dictionary for prevalence.
-        prev should be a value between 0 and 1, and is the
-        minimum fraction of non-zero values required per OTU.
-        After OTUs are filtered for prevalence,
-        higher taxonomic levels are updated to reflect this.
+        Some operations may require transformed data.
+        This function performs normalization and
+        a clr transform on all OTU tables in a Batch object.
+        It returns a deep copy of the original Batch object,
+        so the original file is not modified.
+
+        :param mode: prev or min, specifies whether taxa should be filtered
+        based on prevalence or minimum abundance. The values are stored in the batch.inputs dictionary.
+        :return:
         """
         all_bioms = {'otu': self.otu, 'genus': self.genus,
                      'family': self.family, 'order': self.order,
@@ -310,6 +332,8 @@ class Batch(object):
         A mininum read depth can be specified;
         samples with reads lower than this read depth are removed,
         and then samples are rarefied to equal depth.
+
+        :return:
         """
         all_bioms = {'otu': self.otu, 'genus': self.genus,
                      'family': self.family, 'order': self.order,
@@ -342,12 +366,14 @@ class Batch(object):
         self.class_ = all_bioms['class']
         self.phylum = all_bioms['phylum']
 
-    def split_biom(self, mode="sample", *args):
+    def split_biom(self):
         """
         Splits bioms into several subfiles according to
         sample metadata variable. Source: biom-format.org.
         The original file is preserved, so returned files
         include the split- and non-split files.
+
+        :return:
         """
         inputs = self.inputs
         part_f = lambda id_, md: md[inputs['split']]
@@ -371,7 +397,8 @@ class Batch(object):
         self.otu = new_dict
 
     def cluster_biom(self):
-        """First normalizes bioms so clustering is not affected,
+        """
+        First normalizes bioms so clustering is not affected,
         performs transformation and then applies clustering.
         Note that the returned biom files are not normalized,
         this is just for the clustering process.
@@ -381,6 +408,8 @@ class Batch(object):
         Clustering adds metadata info to the samples.
         Splitting according to cluster ID is done
         by wrapping the split_biom function.
+
+        :return:
         """
         inputs = self.inputs
         if inputs['nclust'] is not None:
@@ -456,12 +485,19 @@ class Batch(object):
 
 
 def _data_bin(biomfile, taxnum, key):
-    """While the BIOM file collapse function collapses counts, it stores taxonomy in a manner
+    """
+    While the BIOM file collapse function collapses counts, it stores taxonomy in a manner
     that is not compatible with the OTU taxonomy; taxonomy is stored as observation ID and not as
     observation metadata.
     Here, new observation IDs are generated for agglomerated data that are a combination
     of the old IDs. Moreover, the taxonomy of the agglomerated data is concatenated to
-    the agglomeration level and added to the observation metadata. """
+    the agglomeration level and added to the observation metadata.
+
+    :param biomfile: BIOM file according to the biom-format standards.
+    :param taxnum: Number indicating taxonomic level (e.g. 6 for Genus).
+    :param key: Value used for naming agglomerated taxa.
+    :return: Taxonomically collapsed BIOM file.
+    """
     collapse_f = lambda id_, md: '; '.join(md['taxonomy'][:taxnum])
     collapsed = biomfile.collapse(collapse_f, norm = False, min_group_size = 1,
                                   axis='observation', include_collapsed_metadata=True)
@@ -485,6 +521,8 @@ def _data_bin(biomfile, taxnum, key):
 def write_settings(settings, path=None):
     """
     Writes a dictionary of settings to a json file.
+
+    :param settings: Dictionary of settings (i.e. 'inputs' in above functions).
     :param settings: Filepath to settings file.
     :return:
     """
@@ -500,6 +538,7 @@ def write_settings(settings, path=None):
 def read_settings(path):
     """
     Writes a dictionary of settings to a json file.
+
     :param path: Filepath to settings file.
     :return: Dictionary of settings
     """
@@ -514,6 +553,7 @@ def read_bioms(counts):
     """
     Given a dictionary of filenames per taxonomic level,
     this function generates a dictionary of biom files.
+
     :param counts: Dictionary of filenames leading to BIOM files
     :return: Dictionary of BIOM files
     """
@@ -525,8 +565,13 @@ def read_bioms(counts):
 
 
 def _create_logger(filepath):
-    """ After a filepath has become available, loggers can be created
-    when required to report on errors. """
+    """
+    After a filepath has become available, loggers can be created
+    when required to report on errors.
+
+    :param filepath: Path where logger files are stored.
+    :return:
+    """
     logpath = filepath + '/massoc.log'
     # filelog path is one folder above massoc
     # pyinstaller creates a temporary folder, so log would be deleted

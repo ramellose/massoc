@@ -97,6 +97,12 @@ class Nets(Batch):
     """
 
     def __init__(self, batch=None):
+        """
+        Initialization function for Nets object.
+        This object can inherit values from the Batch object.
+
+        :param batch: Batch object.
+        """
         super(Nets, self).__init__()
         if batch:
             self.otu = batch.otu
@@ -125,6 +131,8 @@ class Nets(Batch):
     def write_networks(self):
         """
         Writes all networks in a Nets file to graphml files.
+
+        :return:
         """
         try:
             for network in self.networks:
@@ -139,6 +147,9 @@ class Nets(Batch):
         this function adds the network file to the Nets object and checks
         whether the identifiers specified in the file match those in included BIOM files.
         Currently, only edge lists are supported.
+
+        :param filename: Filename with network object.
+        :return:
         """
         network = nx.read_weighted_edgelist(filename)
         try:
@@ -161,11 +172,15 @@ class Nets(Batch):
             self.networks[filename] = network
 
     def _prepare_conet(self):
-        """Carries out initial work before actually running CoNet.
+        """
+        Carries out initial work before actually running CoNet.
         The initial writing function cannot be carried out
         in a multiprocessing operation because the Biom object cannot be pickled.
         However, the bash calls can be pickled; therefore, initial data prep
-        is done first, then the CoNet calls are in parallel. """
+        is done first, then the CoNet calls are in parallel.
+
+        :return:
+        """
         filenames = self.get_filenames()
         ids = dict()
         obs_ids = dict()
@@ -190,11 +205,15 @@ class Nets(Batch):
         return ids, obs_ids
 
     def _prepare_spar(self):
-        """Carries out initial work before actually running SparCC.
+        """
+        Carries out initial work before actually running SparCC.
         The initial writing function cannot be carried out
         in a multiprocessing operation because the Biom object cannot be pickled.
         However, the bash calls can be pickled; therefore, initial data prep
-        is done first, then the SparCC calls are in parallel. """
+        is done first, then the SparCC calls are in parallel.
+
+        :return:
+        """
         filenames = self.get_filenames()
         for x in filenames:
             for y in filenames[x]:
@@ -208,6 +227,10 @@ class Nets(Batch):
 def _add_tax(network, file):
     """
     Adds taxon names from filename.
+
+    :param network: NetworkX object
+    :param file: File with taxonomy
+    :return: Taxonomically annotated network
     """
     file = biom.load_table(file)
     tax = file._observation_metadata
@@ -239,6 +262,13 @@ def run_conet(filenames, conet, orig_ids, obs_ids, settings=None):
     because the exit status of the script is 0 regardless
     of CoNet producing a network or not.
     conet = nets.inputs['conet']
+
+    :param filenames: Location of BIOM files written to disk.
+    :param conet: Location of CoNet folder.
+    :param orig_ids: OTU ids before annotation
+    :param obs_ids: OTU ids with forbidden characters removed
+    :param settings: Dictionary containing settings for CoNet
+    :return: CoNet networks as NetworkX objects
     """
     if settings:
         path = settings
@@ -331,6 +361,10 @@ def run_conet(filenames, conet, orig_ids, obs_ids, settings=None):
 def run_spiec(filenames, settings=None):
     """
     Runs a R executable containing settings for SPIEC-EASI network inference.
+
+    :param filenames: Location of BIOM files written to disk.
+    :param settings: Dictionary containing settings for SPIEC-EASI
+    :return: SPIEC-EASI networks as NetworkX objects
     """
     results = dict()
     if settings:
@@ -365,6 +399,12 @@ def run_spar(filenames, spar, boots=100, pval_threshold=0.001):
     """
     Runs python 2.7 SparCC code.
     spar = nets.inputs['spar'][0]
+
+    :param filenames: Location of BIOM files written to disk.
+    :param spar: Location of SparCC Python code
+    :param boots: Number of bootstraps
+    :param pval_threshold: p-value threshold for SparCC
+    :return: SparCC networks as NetworkX objects
     """
     path = list()
     path.append(spar + '\\SparCC.py')
@@ -421,8 +461,13 @@ def run_spar(filenames, spar, boots=100, pval_threshold=0.001):
 
 
 def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller.
-     Source: https://stackoverflow.com/questions/7674790/bundling-data-files-with-pyinstaller-onefile"""
+    """
+     Get absolute path to resource, works for dev and for PyInstaller.
+     Source: https://stackoverflow.com/questions/7674790/bundling-data-files-with-pyinstaller-onefile
+
+    :param relative_path: Path to MEI location
+    :return:
+    """
     try:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
@@ -435,6 +480,16 @@ def run_jobs(job, spar, conet, orig_ids, obs_ids, filenames,
              spiec_settings=None, conet_settings=None):
     """
     Accepts a job from a joblist to run network inference in parallel.
+
+    :param job: dictionary of dictionary with tools as keys and taxonomic levels as second-layer keys
+    :param spar: Location of SparCC folder
+    :param conet: Location of CoNet folder
+    :param orig_ids: Original OTU IDs
+    :param obs_ids: OTU IDs with forbidden characters removed
+    :param filenames: Locations of BIOM files
+    :param spiec_settings: Location of alternative Rscript for SPIEC-EASI
+    :param conet_settings: Location of alternative Bash script for CoNet
+    :return: NetworkX networks
     """
     select_filenames = {job[0]: {job[2]: filenames[job[0]][job[2]]}}
     # only filenames with the same taxonomic level are included
@@ -469,6 +524,9 @@ def get_joblist(nets):
     Creates a list of jobs that can be distributed over multiple processes.
     Note: should be appended to handle multiple taxonomic levels + files!
     Each job is a tuple of the taxonomic level, tool and name.
+
+    :param nets: Nets object
+    :return: Dictionary of dictionary of jobs
     """
     joblist = list()
     for name in nets.names:
@@ -488,7 +546,12 @@ def get_joblist(nets):
 
 
 def run_parallel(nets):
-    """Creates partial function to run as pool."""
+    """
+    Creates partial function to run as pool.
+
+    :param nets: Nets object
+    :return:
+    """
     cores = nets.inputs['cores']
     jobs = get_joblist(nets)
     filenames = nets.inputs['procbioms']
@@ -527,8 +590,13 @@ def run_parallel(nets):
 
 
 def _create_logger(filepath):
-    """ After a filepath has become available, loggers can be created
-    when required to report on errors. """
+    """
+    After a filepath has become available, loggers can be created
+    when required to report on errors.
+
+    :param filepath: Filepath where logs will be written.
+    :return:
+    """
     logpath = filepath + '/massoc.log'
     # filelog path is one folder above massoc
     # pyinstaller creates a temporary folder, so log would be deleted

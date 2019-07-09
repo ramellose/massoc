@@ -38,7 +38,7 @@ logger.addHandler(sh)
 def massoc(massoc_args):
     """
     Main function for running massoc. 
-    :param argv: Parameters generated through massoc_parser.
+    :param massoc_args: Parameters generated through massoc_parser.
     :return: 
     """
     if 'input' in massoc_args:
@@ -290,7 +290,10 @@ neo4jparser.add_argument('-add', '--additional_data',
                          dest='add',
                          required=False,
                          default=None,
-                         help='Filepath to edge list that will be uploaded to the Neo4j database.')
+                         help='Filepath to edge list or table that will be uploaded to the Neo4j database. \n'
+                              'If the file is a table, the first column should be of nodes inside the database. \n'
+                              'If the column header does not match the network label, (e.g. #SampleID instead of Sample) \n'
+                              'specify this with the type argument.')
 neo4jparser.add_argument('-o', '-output',
                          dest='output',
                          required=False,
@@ -301,6 +304,13 @@ neo4jparser.add_argument('-fp', '--output_filepath',
                          dest='fp',
                          help='Filepath for saving output files and reading settings.',
                          default=os.getcwd())
+neo4jparser.add_argument('-type', '--annotation_type',
+                         dest='type',
+                         help='Node label used in place of 1st column header. \n'
+                              'This label (e.g. Sample) should be specified when using QIITA files,\n'
+                              'or other tables that have a # in front of the column names. ',
+                         default=None,
+                         type=str,)
 neo4jparser.set_defaults(database=True)
 
 

@@ -61,6 +61,10 @@ def get_input(inputs, publish=False):
 
     All files are written to BIOM files, while a settings file is also written to disk
     for use by other massoc commands.
+
+    :param inputs: Dictionary of inputs.
+    :param publish: If True, publishes messages to be received by GUI.
+    :return:
     """
     # handler to file
     # construct logger after filepath is provided
@@ -234,6 +238,10 @@ def get_input(inputs, publish=False):
 def run_network(inputs, publish=False):
     """
     Pipes functions from the different massoc modules to run complete network inference.
+
+    :param inputs: Dictionary of inputs.
+    :param publish: If True, publishes messages to be received by GUI.
+    :return:
     """
     _create_logger(inputs['fp'])
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
@@ -268,6 +276,13 @@ def run_network(inputs, publish=False):
 
 
 def run_neo4j(inputs, publish=False):
+    """
+    Starts and carries out operations on the Neo4j database.
+
+    :param inputs: Dictionary of inputs.
+    :param publish: If True, publishes messages to be received by GUI.
+    :return:
+    """
     _create_logger(inputs['fp'])
     # overwritten settings should be retained
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
@@ -287,6 +302,7 @@ def run_neo4j(inputs, publish=False):
     if inputs['job'] == 'start':
         if not existing_pid:
             start_database(inputs, publish)
+            existing_pid = True
         else:
             logger.info("Database is already running.  ")
     elif inputs['job'] == 'quit':
@@ -316,6 +332,7 @@ def run_neo4j(inputs, publish=False):
     elif inputs['job'] == 'clear':
         if not existing_pid:
             start_database(inputs, publish)
+            existing_pid = True
         try:
             if publish:
                 pub.sendMessage('update', msg='Clearing database...')
@@ -329,6 +346,7 @@ def run_neo4j(inputs, publish=False):
     elif inputs['job'] == 'write':
         if not existing_pid:
             start_database(inputs, publish)
+            existing_pid = True
         try:
             if publish:
                 pub.sendMessage('update', msg='Accessing database...')
@@ -342,6 +360,7 @@ def run_neo4j(inputs, publish=False):
     else:
         if not existing_pid:
             start_database(inputs, publish)
+            existing_pid = True
         if publish:
             pub.sendMessage('update', msg='Uploading files to database...')
         filestore = read_bioms(inputs['procbioms'])
@@ -394,6 +413,7 @@ def run_neo4j(inputs, publish=False):
     if inputs['add']:
         if not existing_pid:
             start_database(inputs, publish)
+            existing_pid = True
         try:
             if publish:
                 pub.sendMessage('update', msg='Uploading files to database...')
@@ -406,13 +426,22 @@ def run_neo4j(inputs, publish=False):
                     # Second column name is type
                     # Newline is cutoff
                     colnames = file.readline().split(sep="\t")
-                    label = colnames[0].rstrip()
+                    lines = file.readlines()[1:]
+                    if not inputs['type']:
+                        label = colnames[0].rstrip()
+                    else:
+                        label = inputs['type']
                     # if the supplied file is a dataframe,
                     # treat first column as source and rest as target
                     for i in range(1, len(colnames)):
+                        node_dict = dict()
                         name = colnames[i].rstrip()
-                        importdriver.include_nodes(nodes=inputs['add'], name=name, label=label)
-                        importdriver.close()
+                        for line in lines:
+                            source = line.split(sep="\t")[0].rstrip()
+                            target = line.split(sep="\t")[1].rstrip()
+                            node_dict[source] = target
+                        importdriver.include_nodes(nodes=node_dict, name=name, label=label)
+            importdriver.close()
         except Exception:
             logger.warning("Failed to upload properties to database.  ", exc_info=True)
     logger.info('Completed database operations!  ')
@@ -422,6 +451,14 @@ def run_neo4j(inputs, publish=False):
 
 
 def run_netstats(inputs, publish=False):
+    """
+    Runs statistical analyses on the Neo4j database, as well as logic operations.
+    To do: null models.
+
+    :param inputs: Dictionary of inputs.
+    :param publish: If True, publishes messages to be received by GUI.
+    :return:
+    """
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
     old_inputs.update(inputs)
     inputs = old_inputs
@@ -487,6 +524,14 @@ def run_netstats(inputs, publish=False):
 
 
 def run_metastats(inputs, publish=False):
+    """
+    Module that carries out analysis of metadata on the database.
+    This module also interfaces with external APIs to pull in additional metadata.
+
+    :param inputs: Dictionary of inputs.
+    :param publish: If True, publishes messages to be received by GUI.
+    :return:
+    """
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
     old_inputs.update(inputs)
     inputs = old_inputs
@@ -543,8 +588,13 @@ def run_metastats(inputs, publish=False):
 
 
 def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller.
-     Source: https://stackoverflow.com/questions/7674790/bundling-data-files-with-pyinstaller-onefile"""
+    """
+    Get absolute path to resource, works for dev and for PyInstaller.
+    Source: https://stackoverflow.com/questions/7674790/bundling-data-files-with-pyinstaller-onefile
+
+    :param relative_path: Path to MEI location.
+    :return:
+    """
     try:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
@@ -554,7 +604,13 @@ def resource_path(relative_path):
 
 
 def start_database(inputs, publish):
-    '''Starts Neo4j database. '''
+    """
+    Starts Neo4j database.
+
+    :param inputs: Dictionary of inputs.
+    :param publish: If True, publishes messages to be received by GUI.
+    :return:
+    """
     try:
         if publish:
             pub.sendMessage('update', msg='Starting database...')
@@ -579,8 +635,13 @@ def start_database(inputs, publish):
 
 
 def _create_logger(filepath):
-    """ After a filepath has become available, loggers can be created
-    when required to report on errors. """
+    """
+    After a filepath has become available, loggers can be created
+    when required to report on errors.
+
+    :param filepath: Filepath where logs will be written.
+    :return:
+    """
     logpath = filepath + '/massoc.log'
     # filelog path is one folder above massoc
     # pyinstaller creates a temporary folder, so log would be deleted
