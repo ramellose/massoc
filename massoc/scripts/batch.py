@@ -509,12 +509,17 @@ def _data_bin(biomfile, taxnum, key):
         keep_tax = biomfile._observation_metadata[keep_obs]['taxonomy'][:taxnum]  # removes tax up to agglom
         id['taxonomy'] = keep_tax
     new_obs_ids = deepcopy(obs_ids)
+    new_obs_index = deepcopy(collapsed._obs_index)
     for number in range(len(obs_ids)):
         id = obs_ids[number]
         num_id = collapsed._obs_index[id]
         old_ids = agglom_ids[num_id]
-        new_obs_ids[number] = key + "-agglom-" + str(number)
+        new_id = key + "-agglom-" + str(number)
+        new_obs_ids[number] = new_id
+        # need to update index as well
+        new_obs_index[new_id] = new_obs_index.pop(id)
     collapsed._observation_ids = new_obs_ids
+    collapsed._obs_index = new_obs_index
     return collapsed
 
 

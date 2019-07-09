@@ -519,6 +519,8 @@ def run_netstats(inputs, publish=False):
         checks += 'Failed to run database worker. \n'
     if publish:
         pub.sendMessage('database_log', msg=checks)
+    importdriver.close()
+    netdriver.close()
     logger.info('Completed netstats operations!  ')
     write_settings(inputs)
 
@@ -546,6 +548,10 @@ def run_metastats(inputs, publish=False):
                                 password=inputs['password'],
                                 uri=inputs['address'],
                                 filepath=inputs['fp'])
+        importdriver = ImportDriver(user=inputs['username'],
+                              password=inputs['password'],
+                              uri=inputs['address'],
+                              filepath=inputs['fp'])
     except Exception:
         logger.warning("Failed to start database worker.  ", exc_info=True)
     try:
@@ -583,6 +589,10 @@ def run_metastats(inputs, publish=False):
         checks += 'Failed to compute metadata associations. \n'
     if publish:
         pub.sendMessage('database_log', msg=checks)
+    # functions to include:
+    # include_sequences
+    metadriver.close()
+    importdriver.close()
     logger.info('Completed metastats operations!  ')
     write_settings(inputs)
 

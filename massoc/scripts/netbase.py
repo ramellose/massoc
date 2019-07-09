@@ -180,8 +180,8 @@ class ImportDriver(object):
         The column names are used to assign node types to the new metadata.
 
         :param nodes: Dictionary of existing nodes as values with node names as keys
-        :param label: Label of source node (e.g. Taxon, Sample, Property, Experiment etc)
         :param name: Name of variable, inserted in Neo4j graph database as type
+        :param label: Label of source node (e.g. Taxon, Sample, Property, Experiment etc)
         :return:
         """
         # first step:

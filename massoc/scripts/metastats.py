@@ -16,6 +16,9 @@ from uuid import uuid4
 from scipy.stats import hypergeom, spearmanr
 import sys
 import logging.handlers
+import re
+import os
+from massoc.scripts.netbase import ImportDriver
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -331,7 +334,8 @@ class MetaDriver(object):
         except Exception:
             logger.error("Could not agglomerate a pair of matching associations. \n", exc_info=True)
 
-    def include_sequences(self, location):
+    @staticmethod
+    def include_sequences(location, driver):
         """
         This function opens a folder of FASTA sequences with identifiers
         matching to OTU identifiers in the Neo4j database.
@@ -339,9 +343,21 @@ class MetaDriver(object):
         the database with the Neo4j driver function include_nodes.
 
         :param location: Folder containing FASTA sequences matching to OTU identifiers.
+        I.e. GreenGenes FASTA files are accepted.
+        :param driver: ImportDriver object
         :return: Updates database with 16S sequences.
         """
-        pass
+        sequence_dict = dict()
+        for filename in os.listdir(location):
+            with open(location + '//' + filename, 'r') as file:
+                lines = file.readlines()
+            for i in range(0, len(lines), 2):
+                otu = lines[i]
+                otu = ''.join(re.findall(r'\d+', otu))
+                sequence = lines[i + 1].rstrip()
+                sequence_dict[otu] = sequence
+        # with the sequence list, run include_nodes
+        driver.include_nodes(sequence_dict, name="16S", label="Taxon")
 
     @staticmethod
     def _query(tx, query):
