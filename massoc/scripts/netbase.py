@@ -207,7 +207,7 @@ class ImportDriver(object):
         :return: Boolean
         """
         with self._driver.session() as session:
-            match = session.read_transaction(self._find_nodes, list(nodes.keys()))
+            match = session.read_transaction(self._find_nodes, nodes)
         return match
 
     def export_network(self, path, pairlist=None):
