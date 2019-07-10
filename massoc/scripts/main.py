@@ -184,6 +184,11 @@ def get_input(inputs, publish=False):
         logger.info('Rarefying counts... ')
         bioms.rarefy()
     bioms.inputs['procbioms'] = dict()
+    if 'otu' not in bioms.inputs['levels']: # add otu level always
+        bioms.inputs['procbioms']['otu'] = dict()
+        for name in bioms.inputs['name']:
+            biomname = bioms.inputs['fp'] + '/' + name + '_' + 'otu' + '.hdf5'
+            bioms.inputs['procbioms']['otu'][name] = biomname
     for level in bioms.inputs['levels']:
         bioms.inputs['procbioms'][level] = dict()
         for name in bioms.inputs['name']:
@@ -575,7 +580,7 @@ def run_metastats(inputs, publish=False):
     try:
         # write operations here
         if inputs['sequence']:
-                logger.info("Uploading 16S sequences...")
+                logger.info("Uploading 16S sequences. This can take a few minutes!")
                 metadriver.include_sequences(inputs['sequence'], importdriver)
                 checks += 'Uploaded 16S sequences. \n'
     except Exception:

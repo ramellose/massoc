@@ -334,8 +334,7 @@ class MetaDriver(object):
         except Exception:
             logger.error("Could not agglomerate a pair of matching associations. \n", exc_info=True)
 
-    @staticmethod
-    def include_sequences(location, driver):
+    def include_sequences(self, location, driver):
         """
         This function opens a folder of FASTA sequences with identifiers
         matching to OTU identifiers in the Neo4j database.
@@ -347,10 +346,15 @@ class MetaDriver(object):
         :param driver: ImportDriver object
         :return: Updates database with 16S sequences.
         """
+        # get list of taxa in database
+        with self._driver.session() as session:
+            taxa = session.read_transaction(self._get_list, 'Taxon')
         sequence_dict = dict()
         for filename in os.listdir(location):
+            logger.info("Found " + str(len(os.listdir(location))) + " files.")
             with open(location + '//' + filename, 'r') as file:
                 lines = file.readlines()
+                logger.info("16S file " + filename + " contains " + str(len(lines)/2) + " sequences.")
             for i in range(0, len(lines), 2):
                 otu = lines[i].rstrip()[1:]  # remove > and \n
                 sequence = lines[i + 1].rstrip()
@@ -358,6 +362,40 @@ class MetaDriver(object):
                     sequence_dict[otu] = sequence
         # with the sequence list, run include_nodes
         driver.include_nodes(sequence_dict, name="16S", label="Taxon", check=False)
+
+    @staticmethod
+    def get_trait_tables():
+        """
+        This modified function is heavily derived from PICRUSt2.
+        While massoc does not require abundance tables of traits,
+        the traits can be uploaded to the database to support
+        context similarity analysis.
+
+        The preprint describing PICRUSt2 is linked below:
+        Douglas, G. M., Maffei, V. J., Zaneveld, J., Yurgel, S. N.,
+        Brown, J. R., Taylor, C. M., ... & Langille, M. G. (2019).
+        PICRUSt2: An improved and extensible approach for
+        metagenome inference. BioRxiv, 672295.
+
+        This function uses these tools wrapped by PICRUSt2:
+        HMMER: http://hmmer.org/
+        EPA-ng: Barbera, P., Kozlov, A. M., Czech, L.,
+        Morel, B., Darriba, D., Flouri, T., & Stamatakis, A. (2018).
+        EPA-ng: massively parallel evolutionary placement
+        of genetic sequences. Systematic biology, 68(2), 365-369.
+
+        gappa: Czech, L., & Stamatakis, A. (2019).
+        Scalable methods for analyzing and visualizing
+        phylogenetic placement of metagenomic samples.
+        PloS one, 14(5), e0217050.
+
+        castor: Louca, S., & Doebeli, M. (2017).
+        Efficient comparative phylogenetics on large trees.
+        Bioinformatics, 34(6), 1053-1055.
+
+        :return:
+        """
+
 
     @staticmethod
     def _query(tx, query):
@@ -371,6 +409,18 @@ class MetaDriver(object):
         results = tx.run(query).data()
         return results
 
+    @staticmethod
+    def _get_list(tx, label):
+        """
+        Returns a list of nodes with the specified label.
+
+        :param tx: Neo4j transaction
+        :param label: Neo4j database label of nodes
+        :return: List of nodes with specified label.
+        """
+        results = tx.run(("MATCH (n:" + label + ") RETURN n")).data()
+        results = _get_unique(results, key="n")
+        return results
 
     @staticmethod
     def _pair_list(tx, level, mode):
