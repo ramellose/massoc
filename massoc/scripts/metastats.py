@@ -354,7 +354,7 @@ class MetaDriver(object):
             for i in range(0, len(lines), 2):
                 otu = lines[i].rstrip()[1:]  # remove > and \n
                 sequence = lines[i + 1].rstrip()
-                if driver._find_nodes([otu]):
+                if driver.find_nodes([otu]):
                     sequence_dict[otu] = sequence
         # with the sequence list, run include_nodes
         driver.include_nodes(sequence_dict, name="16S", label="Taxon", check=False)

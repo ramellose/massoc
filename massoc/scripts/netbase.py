@@ -199,6 +199,17 @@ class ImportDriver(object):
                                           source=node, sourcetype=label,
                                           target=nodes[node], name=name)
 
+    def find_nodes(self, nodes):
+        """
+        Returns 'True' if all names in the node list are found in the database.
+
+        :param nodes: Dictionary of existing nodes as values with node names as keys
+        :return: Boolean
+        """
+        with self._driver.session() as session:
+            match = session.read_transaction(self._find_nodes, list(nodes.keys()))
+        return match
+
     def export_network(self, path, pairlist=None):
         """
         Writes network to graphML file.
