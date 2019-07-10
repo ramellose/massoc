@@ -352,10 +352,10 @@ class MetaDriver(object):
             with open(location + '//' + filename, 'r') as file:
                 lines = file.readlines()
             for i in range(0, len(lines), 2):
-                otu = lines[i]
-                otu = ''.join(re.findall(r'\d+', otu))
+                otu = lines[i].rstrip()[1:]  # remove > and \n
                 sequence = lines[i + 1].rstrip()
-                sequence_dict[otu] = sequence
+                if driver._find_nodes([otu]):
+                    sequence_dict[otu] = sequence
         # with the sequence list, run include_nodes
         driver.include_nodes(sequence_dict, name="16S", label="Taxon", check=False)
 
