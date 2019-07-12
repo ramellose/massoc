@@ -570,7 +570,6 @@ def run_metastats(inputs, publish=False):
             logger.warning("Failed to upload properties to database.  ", exc_info=True)
     inputs['add'] = None
     # prevents reuploading
-
     try:
         # write operations here
         if inputs['agglom']:

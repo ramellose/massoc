@@ -286,22 +286,6 @@ neo4jparser.add_argument('-j', '--job',
                               'start: Start local database. \n'
                               'upload: Upload BIOM file(s) in settings to the database. \n'
                               'write: Export Cytoscape-compatible file from the database.')
-neo4jparser.add_argument('-add', '--additional_data',
-                         dest='add',
-                         required=False,
-                         default=None,
-                         nargs='+',
-                         help='Filepath to edge list or table that will be uploaded to the Neo4j database. \n'
-                              'If the file is a table, the first column should be of nodes inside the database. \n'
-                              'If the column header does not match the network label, (e.g. #SampleID instead of Sample) \n'
-                              'specify this with the type argument.')
-neo4jparser.add_argument('-abn', '--abundance_data',
-                         dest='abundance',
-                         required=False,
-                         default=None,
-                         nargs='+',
-                         help='If you are adding metadata that is an abundance table,'
-                              ' specify the type of data (e.g. KO terms) here. ')
 neo4jparser.add_argument('-o', '-output',
                          dest='output',
                          required=False,
@@ -312,13 +296,6 @@ neo4jparser.add_argument('-fp', '--output_filepath',
                          dest='fp',
                          help='Filepath for saving output files and reading settings.',
                          default=os.getcwd())
-neo4jparser.add_argument('-type', '--annotation_type',
-                         dest='type',
-                         help='Node label used in place of 1st column header. \n'
-                              'This label (e.g. Sample) should be specified when using QIITA files,\n'
-                              'or other tables that have a # in front of the column names. ',
-                         default=None,
-                         type=str,)
 neo4jparser.set_defaults(database=True)
 
 
@@ -354,6 +331,29 @@ metastatsparser = subparsers.add_parser('metastats', description='Network meta-a
                                              'this module carries out network analyses that incorporate'
                                              ' provided metadata. Such metadata can include taxonomic data,'
                                              ' or it can include nodes with specific labels. ')
+metastatsparser.add_argument('-add', '--additional_data',
+                             dest='add',
+                             required=False,
+                             default=None,
+                             nargs='+',
+                             help='Filepath to edge list or table that will be uploaded to the Neo4j database. \n'
+                             'If the file is a table, the first column should be of nodes inside the database. \n'
+                             'If the column header does not match the network label, (e.g. #SampleID instead of Sample) \n'
+                             'specify this with the type argument.')
+metastatsparser.add_argument('-abn', '--abundance_data',
+                             dest='abundance',
+                             required=False,
+                             default=None,
+                             nargs='+',
+                             help='If you are adding metadata that is an abundance table,'
+                             ' specify the type of data (e.g. KO terms) here. ')
+metastatsparser.add_argument('-type', '--annotation_type',
+                             dest='type',
+                             help='Node label used in place of 1st column header. \n'
+                             'This label (e.g. Sample) should be specified when using QIITA files,\n'
+                             'or other tables that have a # in front of the column names. ',
+                             default=None,
+                             type=str, )
 metastatsparser.add_argument('-tax', '--tax_agglomeration',
                              dest='agglom',
                              help='Taxonomic level used for network agglomeration.',
