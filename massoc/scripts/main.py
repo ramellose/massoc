@@ -447,7 +447,7 @@ def run_neo4j(inputs, publish=False):
                         for line in lines:
                             source = line.split(sep="\t")[0].rstrip()
                             weight = None
-                            if inputs['abundance'][k]:
+                            if inputs['abundance']:
                                 target = colnames[i].rstrip()
                                 name = inputs['abundance'][k]
                                 weight = line.split(sep="\t")[i].rstrip()
