@@ -297,7 +297,7 @@ class ImportDriver(object):
         except Exception:
             logger.error("Could not create association shortcuts. \n", exc_info=True)
 
-    def include_sequences(self, location, driver):
+    def include_sequences(self, location):
         """
         This function opens a folder of FASTA sequences with identifiers
         matching to OTU identifiers in the Neo4j database.
@@ -326,7 +326,7 @@ class ImportDriver(object):
         seqs_in_database = taxa.intersection(sequence_dict.keys())
         sequence_dict = {k: {'target': v, 'weight': None} for k, v in sequence_dict.items() if k in seqs_in_database}
         logger.info("Uploading " + str(len(sequence_dict)) + " sequences.")
-        driver.include_nodes(sequence_dict, name="16S", label="Taxon", check=False)
+        self.include_nodes(sequence_dict, name="16S", label="Taxon", check=False)
 
     @staticmethod
     def _delete_all(tx):
