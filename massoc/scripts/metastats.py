@@ -348,8 +348,8 @@ class MetaDriver(object):
         with self._driver.session() as session:
             taxa = session.read_transaction(self._get_list, 'Taxon')
         sequence_dict = dict()
+        logger.info("Found " + str(len(os.listdir(location))) + " files.")
         for filename in os.listdir(location):
-            logger.info("Found " + str(len(os.listdir(location))) + " files.")
             with open(location + '//' + filename, 'r') as file:
                 lines = file.readlines()
                 logger.info("16S file " + filename + " contains " + str(int(len(lines)/2)) + " sequences.")
@@ -359,7 +359,7 @@ class MetaDriver(object):
                 sequence_dict[otu] = sequence
         # with the sequence list, run include_nodes
         seqs_in_database = taxa.intersection(sequence_dict.keys())
-        sequence_dict = {k: v for k, v in sequence_dict.items() if k in seqs_in_database}
+        sequence_dict = {k: {'target': v, 'weight': None} for k, v in sequence_dict.items() if k in seqs_in_database}
         logger.info("Uploading " + str(len(sequence_dict)) + " sequences.")
         driver.include_nodes(sequence_dict, name="16S", label="Taxon", check=False)
 
