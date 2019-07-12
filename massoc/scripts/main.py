@@ -551,9 +551,13 @@ def run_metastats(inputs, publish=False):
                         label = inputs['type']
                     # if the supplied file is a dataframe,
                     # treat first column as source and rest as target
+                    logger.info('Found ' + str(len(colnames)) + ' properties.')
                     for i in range(1, len(colnames)):
+                        # give a logger update every 5th property
                         node_dict = dict()
                         name = colnames[i].rstrip()
+                        if i % 5 == 0:
+                            logger.info('Working on the ' + str(i) + 'th iteration.')
                         for line in lines:
                             source = line.split(sep="\t")[0].rstrip()
                             weight = None
@@ -563,7 +567,8 @@ def run_metastats(inputs, publish=False):
                                 weight = line.split(sep="\t")[i].rstrip()
                             else:
                                 target = line.split(sep="\t")[i].rstrip()
-                            node_dict[source] = {'target': target, 'weight': weight}
+                            if weight != 0:
+                                node_dict[source] = {'target': target, 'weight': weight}
                         importdriver.include_nodes(nodes=node_dict, name=name, label=label)
             importdriver.close()
         except Exception:
