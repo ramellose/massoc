@@ -464,6 +464,8 @@ class ImportDriver(object):
                 "' RETURN r")).data()
         if weight:
             rel = " {weight: [" + weight + "]}"
+        else:
+            rel = ""
         if len(matching_rel) == 0:
             tx.run(("MATCH (a" + sourcetype + "), (b:Property) "
                     "WHERE a.name = '" + source +
