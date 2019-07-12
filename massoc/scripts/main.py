@@ -428,7 +428,8 @@ def run_neo4j(inputs, publish=False):
                                         uri=inputs['address'], filepath=inputs['fp'])
             # create dictionary from file
             # first check if this is an abundance table
-            for filepath in inputs['add']:
+            for k in range(inputs['add']):
+                filepath = inputs['add'][k]
                 with open(filepath, 'r') as file:
                     # Second column name is type
                     # Newline is cutoff
@@ -446,9 +447,9 @@ def run_neo4j(inputs, publish=False):
                         for line in lines:
                             source = line.split(sep="\t")[0].rstrip()
                             weight = None
-                            if inputs['abundance']:
+                            if inputs['abundance'][k]:
                                 target = colnames[i].rstrip()
-                                name = inputs['abundance']
+                                name = inputs['abundance'][k]
                                 weight = line.split(sep="\t")[i].rstrip()
                             else:
                                 target = line.split(sep="\t")[i].rstrip()
