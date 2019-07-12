@@ -814,7 +814,6 @@ class ImportDriver(object):
         for name in names:
             netname = tx.run("MATCH (n {name: '" + name +
                              "'}) RETURN n").data()
-            netname = _get_unique(netname, key='n')
             # only checking node name; should be unique in database!
             found = True
             if len(netname) == 0:
