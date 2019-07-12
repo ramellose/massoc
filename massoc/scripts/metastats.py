@@ -987,11 +987,13 @@ def _get_unique(node_list, key, mode=None):
     :return: Unique nodes (list of nodes) or node number
     """
     unique_samples = list()
-    for item in node_list:
-        unique_samples.append(item[key].get('name'))
-    unique_samples = set(unique_samples)
-    if mode == 'num':
-        unique_samples = len(unique_samples)
+    if node_list:
+        # it is possible that nodes do not yet exist
+        for item in node_list:
+            unique_samples.append(item[key].get('name'))
+        unique_samples = set(unique_samples)
+        if mode == 'num':
+            unique_samples = len(unique_samples)
     return unique_samples
 
 
