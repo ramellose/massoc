@@ -569,6 +569,7 @@ def run_metastats(inputs, publish=False):
         except Exception:
             logger.warning("Failed to upload properties to database.  ", exc_info=True)
     inputs['add'] = None
+    inputs['type'] = None
     # prevents reuploading
     try:
         # write operations here
