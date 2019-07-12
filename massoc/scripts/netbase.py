@@ -21,6 +21,7 @@ from massoc.scripts.netstats import _get_unique
 import numpy as np
 import logging
 import sys
+import os
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -295,6 +296,37 @@ class ImportDriver(object):
             return network
         except Exception:
             logger.error("Could not create association shortcuts. \n", exc_info=True)
+
+    def include_sequences(self, location, driver):
+        """
+        This function opens a folder of FASTA sequences with identifiers
+        matching to OTU identifiers in the Neo4j database.
+        The FASTA sequences are converted to a dictionary and uploaded to
+        the database with the Neo4j driver function include_nodes.
+
+        :param location: Folder containing FASTA sequences matching to OTU identifiers.
+        I.e. GreenGenes FASTA files are accepted.
+        :param driver: ImportDriver object
+        :return: Updates database with 16S sequences.
+        """
+        # get list of taxa in database
+        with self._driver.session() as session:
+            taxa = session.read_transaction(self._get_list, 'Taxon')
+        sequence_dict = dict()
+        logger.info("Found " + str(len(os.listdir(location))) + " files.")
+        for filename in os.listdir(location):
+            with open(location + '//' + filename, 'r') as file:
+                lines = file.readlines()
+                logger.info("16S file " + filename + " contains " + str(int(len(lines)/2)) + " sequences.")
+            for i in range(0, len(lines), 2):
+                otu = lines[i].rstrip()[1:]  # remove > and \n
+                sequence = lines[i + 1].rstrip()
+                sequence_dict[otu] = sequence
+        # with the sequence list, run include_nodes
+        seqs_in_database = taxa.intersection(sequence_dict.keys())
+        sequence_dict = {k: {'target': v, 'weight': None} for k, v in sequence_dict.items() if k in seqs_in_database}
+        logger.info("Uploading " + str(len(sequence_dict)) + " sequences.")
+        driver.include_nodes(sequence_dict, name="16S", label="Taxon", check=False)
 
     @staticmethod
     def _delete_all(tx):
@@ -660,6 +692,36 @@ class ImportDriver(object):
                             "' AND b.name = '" + name +
                             "' CREATE (a)-[r:IN_NETWORK]->(b) "
                             "RETURN type(r)"))
+
+    @staticmethod
+    def _get_list(tx, label):
+        """
+        Returns a list of nodes with the specified label.
+
+        :param tx: Neo4j transaction
+        :param label: Neo4j database label of nodes
+        :return: List of nodes with specified label.
+        """
+        results = tx.run(("MATCH (n:" + label + ") RETURN n")).data()
+        results = _get_unique(results, key="n")
+        return results
+
+    @staticmethod
+    def _get_fasta(tx):
+        """
+        Generates a string of FASTA sequences.
+
+        :param tx: Neo4j transaction
+        :return: String of FASTA sequences.
+        """
+        results = tx.run("MATCH (n:Taxon)--(m:Property {type: '16S'}) RETURN n,m").data()
+        fasta_dict = {}
+        for result in results:
+            fasta_dict[result['n']['name']] = result['m']['name']
+        fasta_string = str()
+        for key in fasta_dict:
+            fasta_string += '>' + key + '\n' + fasta_dict[key] + '\n'
+        return fasta_string
 
     @staticmethod
     def _association_list(tx):

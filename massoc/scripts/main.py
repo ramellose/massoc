@@ -415,52 +415,7 @@ def run_neo4j(inputs, publish=False):
         if publish:
             pub.sendMessage('database_log', msg=checks)
         importdriver.close()
-    if inputs['add']:
-        if not existing_pid:
-            start_database(inputs, publish)
-            existing_pid = True
-        try:
-            logger.info('Uploading additional properties...  ')
-            if publish:
-                pub.sendMessage('update', msg='Uploading files to database...')
-            importdriver = ImportDriver(user=inputs['username'],
-                                        password=inputs['password'],
-                                        uri=inputs['address'], filepath=inputs['fp'])
-            # create dictionary from file
-            # first check if this is an abundance table
-            for k in range(len(inputs['add'])):
-                filepath = inputs['add'][k]
-                with open(filepath, 'r') as file:
-                    # Second column name is type
-                    # Newline is cutoff
-                    colnames = file.readline().split(sep="\t")
-                    lines = file.readlines()[1:]
-                    if not inputs['type']:
-                        label = colnames[0].rstrip()
-                    else:
-                        label = inputs['type']
-                    # if the supplied file is a dataframe,
-                    # treat first column as source and rest as target
-                    for i in range(1, len(colnames)):
-                        node_dict = dict()
-                        name = colnames[i].rstrip()
-                        for line in lines:
-                            source = line.split(sep="\t")[0].rstrip()
-                            weight = None
-                            if inputs['abundance']:
-                                target = colnames[i].rstrip()
-                                name = inputs['abundance'][k]
-                                weight = line.split(sep="\t")[i].rstrip()
-                            else:
-                                target = line.split(sep="\t")[i].rstrip()
-                            node_dict[source] = {'target': target, 'weight': weight}
-                        importdriver.include_nodes(nodes=node_dict, name=name, label=label)
-            importdriver.close()
-        except Exception:
-            logger.warning("Failed to upload properties to database.  ", exc_info=True)
     logger.info('Completed database operations!  ')
-    inputs['add'] = None
-    # prevents reuploading
     write_settings(inputs)
 
 
@@ -568,6 +523,54 @@ def run_metastats(inputs, publish=False):
                               filepath=inputs['fp'])
     except Exception:
         logger.warning("Failed to start database worker.  ", exc_info=True)
+    if inputs['sequence']:
+        try:
+            logger.info('Uploading sequences to database...')
+            if publish:
+                pub.sendMessage('update', msg='Uploading sequences to database...')
+            importdriver.include_sequences(inputs['sequence'])
+        except Exception:
+            logger.warning("Failed to upload sequences to database.  ", exc_info=True)
+    if inputs['add']:
+        try:
+            logger.info('Uploading additional properties...  ')
+            if publish:
+                pub.sendMessage('update', msg='Uploading files to database...')
+            # create dictionary from file
+            # first check if this is an abundance table
+            for k in range(len(inputs['add'])):
+                filepath = inputs['add'][k]
+                with open(filepath, 'r') as file:
+                    # Second column name is type
+                    # Newline is cutoff
+                    colnames = file.readline().split(sep="\t")
+                    lines = file.readlines()[1:]
+                    if not inputs['type']:
+                        label = colnames[0].rstrip()
+                    else:
+                        label = inputs['type']
+                    # if the supplied file is a dataframe,
+                    # treat first column as source and rest as target
+                    for i in range(1, len(colnames)):
+                        node_dict = dict()
+                        name = colnames[i].rstrip()
+                        for line in lines:
+                            source = line.split(sep="\t")[0].rstrip()
+                            weight = None
+                            if inputs['abundance']:
+                                target = colnames[i].rstrip()
+                                name = inputs['abundance'][k]
+                                weight = line.split(sep="\t")[i].rstrip()
+                            else:
+                                target = line.split(sep="\t")[i].rstrip()
+                            node_dict[source] = {'target': target, 'weight': weight}
+                        importdriver.include_nodes(nodes=node_dict, name=name, label=label)
+            importdriver.close()
+        except Exception:
+            logger.warning("Failed to upload properties to database.  ", exc_info=True)
+    inputs['add'] = None
+    # prevents reuploading
+
     try:
         # write operations here
         if inputs['agglom']:
@@ -585,16 +588,6 @@ def run_metastats(inputs, publish=False):
     except Exception:
         logger.warning("Failed to carry out edge agglomeration.  ", exc_info=True)
         checks += 'Failed to carry out edge agglomeration. \n'
-    try:
-        # write operations here
-        if inputs['sequence']:
-                logger.info("Uploading 16S sequences. This can take a few minutes!")
-                metadriver.include_sequences(inputs['sequence'], importdriver)
-                checks += 'Uploaded 16S sequences. \n'
-    except Exception:
-        logger.warning("Failed to upload 16S sequences.  ", exc_info=True)
-        checks += 'Failed to upload 16S sequences. \n'
-
     try:
         if inputs['variable']:
             logger.info("Associating samples...  ")
