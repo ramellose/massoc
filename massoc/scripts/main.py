@@ -427,6 +427,7 @@ def run_neo4j(inputs, publish=False):
                                         password=inputs['password'],
                                         uri=inputs['address'], filepath=inputs['fp'])
             # create dictionary from file
+            # first check if this is an abundance table
             for filepath in inputs['add']:
                 with open(filepath, 'r') as file:
                     # Second column name is type
@@ -444,8 +445,14 @@ def run_neo4j(inputs, publish=False):
                         name = colnames[i].rstrip()
                         for line in lines:
                             source = line.split(sep="\t")[0].rstrip()
-                            target = line.split(sep="\t")[i].rstrip()
-                            node_dict[source] = target
+                            weight = None
+                            if inputs['abundance']:
+                                target = colnames[i].rstrip()
+                                name = inputs['abundance']
+                                weight = line.split(sep="\t")[i].rstrip()
+                            else:
+                                target = line.split(sep="\t")[i].rstrip()
+                            node_dict[source] = {'target': target, 'weight': weight}
                         importdriver.include_nodes(nodes=node_dict, name=name, label=label)
             importdriver.close()
         except Exception:

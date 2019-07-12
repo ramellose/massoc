@@ -157,7 +157,7 @@ class ImportDriver(object):
                             # meta[key] = re.sub(r'\W+', '', str(meta[key]))
                             session.write_transaction(self._create_property,
                                                       source=sample, sourcetype='Sample',
-                                                      target=meta[key], name=key)
+                                                      target=meta[key], name=key, weight=None)
             obs_data = biomfile.to_dataframe()
             rows, cols = np.where(obs_data.values != 0)
             observations = list()
@@ -172,12 +172,14 @@ class ImportDriver(object):
 
     def include_nodes(self, nodes, name, label, check=True):
         """
-        Given a named dictionary, this function tries to upload
+        Given a dictionary, this function tries to upload
         the file to the Neo4j database.
         The first column of the edgelist should reflect nodes
         already present in the Neo4j graph database,
         while the second column reflects node names that will be added.
         The column names are used to assign node types to the new metadata.
+
+        The dictionary should contain another dictionary of target nodes and edge weights.
 
         :param nodes: Dictionary of existing nodes as values with node names as keys
         :param name: Name of variable, inserted in Neo4j graph database as type
@@ -197,7 +199,7 @@ class ImportDriver(object):
             for node in nodes:
                 session.write_transaction(self._create_property,
                                           source=node, sourcetype=label,
-                                          target=nodes[node], name=name)
+                                          target=nodes[node]['target'], name=name, weight=nodes[node]['weight'])
 
     def find_nodes(self, nodes):
         """
@@ -293,7 +295,6 @@ class ImportDriver(object):
             return network
         except Exception:
             logger.error("Could not create association shortcuts. \n", exc_info=True)
-
 
     @staticmethod
     def _delete_all(tx):
@@ -433,7 +434,7 @@ class ImportDriver(object):
                 "RETURN type(r)"))
 
     @staticmethod
-    def _create_property(tx, source, target, name, sourcetype=''):
+    def _create_property(tx, source, target, name, weight, sourcetype=''):
         """
         Creates target node if it does not exist yet
         and adds the relationship between target and source.
@@ -442,6 +443,7 @@ class ImportDriver(object):
         :param source: Source node, should exist in database
         :param target: Target node
         :param name: Type variable of target node
+        :param weight: Weight of relationship
         :param sourcetype: Type variable of source node (not required)
         :return:
         """
@@ -460,12 +462,14 @@ class ImportDriver(object):
                 "' AND b.name = '" + target +
                 "' AND b.type = '" + name +
                 "' RETURN r")).data()
+        if weight:
+            rel = " {weight: [" + weight + "]}"
         if len(matching_rel) == 0:
             tx.run(("MATCH (a" + sourcetype + "), (b:Property) "
                     "WHERE a.name = '" + source +
                     "' AND b.name = '" + target +
                     "' AND b.type = '" + name +
-                    "' CREATE (a)-[r:HAS_PROPERTY]->(b) "
+                    "' CREATE (a)-[r:HAS_PROPERTY" + rel + "]->(b) "
                     "RETURN type(r)"))
 
 

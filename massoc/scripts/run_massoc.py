@@ -294,6 +294,12 @@ neo4jparser.add_argument('-add', '--additional_data',
                               'If the file is a table, the first column should be of nodes inside the database. \n'
                               'If the column header does not match the network label, (e.g. #SampleID instead of Sample) \n'
                               'specify this with the type argument.')
+neo4jparser.add_argument('-abn', '--abundance_data',
+                         dest='abundance',
+                         required=False,
+                         default=None,
+                         help='If you are adding metadata that is an abundance table,'
+                              ' specify the type of data (e.g. KO terms) here. ')
 neo4jparser.add_argument('-o', '-output',
                          dest='output',
                          required=False,

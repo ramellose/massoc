@@ -16,9 +16,7 @@ from uuid import uuid4
 from scipy.stats import hypergeom, spearmanr
 import sys
 import logging.handlers
-import re
 import os
-from massoc.scripts.netbase import ImportDriver
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -354,47 +352,47 @@ class MetaDriver(object):
             logger.info("Found " + str(len(os.listdir(location))) + " files.")
             with open(location + '//' + filename, 'r') as file:
                 lines = file.readlines()
-                logger.info("16S file " + filename + " contains " + str(len(lines)/2) + " sequences.")
+                logger.info("16S file " + filename + " contains " + str(int(len(lines)/2)) + " sequences.")
             for i in range(0, len(lines), 2):
                 otu = lines[i].rstrip()[1:]  # remove > and \n
                 sequence = lines[i + 1].rstrip()
-                if driver.find_nodes([otu]):
-                    sequence_dict[otu] = sequence
+                sequence_dict[otu] = sequence
         # with the sequence list, run include_nodes
+        seqs_in_database = taxa.intersection(sequence_dict.keys())
+        sequence_dict = {k: v for k, v in sequence_dict.items() if k in seqs_in_database}
+        logger.info("Uploading " + str(len(sequence_dict)) + " sequences.")
         driver.include_nodes(sequence_dict, name="16S", label="Taxon", check=False)
 
-    @staticmethod
-    def get_trait_tables():
+    def export_fasta(self, fp, name):
         """
-        This modified function is heavily derived from PICRUSt2.
-        While massoc does not require abundance tables of traits,
-        the traits can be uploaded to the database to support
-        context similarity analysis.
+        This function exports a FASTA file compatible with other tools,
+        e.g. PICRUSt2.
+        The advantage of using this FASTA file is that it
+        only contains taxa present in the database.
+        Hence, tools like PICRUSt2 will run much faster.
 
-        The preprint describing PICRUSt2 is linked below:
-        Douglas, G. M., Maffei, V. J., Zaneveld, J., Yurgel, S. N.,
-        Brown, J. R., Taylor, C. M., ... & Langille, M. G. (2019).
-        PICRUSt2: An improved and extensible approach for
-        metagenome inference. BioRxiv, 672295.
+        While massoc cannot directly run PICRUSt2, the below command
+        is an example of how you could generate a PICRUSt2 table to provide to massoc.
+        You don't need to run the full PICRUSt2 pipeline because
+        massoc will not use the predicted function abundances.
 
-        This function uses these tools wrapped by PICRUSt2:
-        HMMER: http://hmmer.org/
-        EPA-ng: Barbera, P., Kozlov, A. M., Czech, L.,
-        Morel, B., Darriba, D., Flouri, T., & Stamatakis, A. (2018).
-        EPA-ng: massively parallel evolutionary placement
-        of genetic sequences. Systematic biology, 68(2), 365-369.
+        For the cheese demo, you could run PICRUSt2 as follows:
+        place seqs.py -s cheese.fasta -o cheese.tre -p 1
 
-        gappa: Czech, L., & Stamatakis, A. (2019).
-        Scalable methods for analyzing and visualizing
-        phylogenetic placement of metagenomic samples.
-        PloS one, 14(5), e0217050.
 
-        castor: Louca, S., & Doebeli, M. (2017).
-        Efficient comparative phylogenetics on large trees.
-        Bioinformatics, 34(6), 1053-1055.
-
+        :param fp: Output filepath for storing intermediate files.
+        :param name: List of names for files in database.
         :return:
         """
+        # first run the system_call_check place_seqs_cmd
+        # many of the commands are default
+        # we can extract a fasta of sequences from the database
+        with self._driver.session() as session:
+            study_fasta = session.read_transaction(self._get_fasta)
+        file = open(fp + "//" + ''.join(name) + ".fasta", "w")
+        file.write(study_fasta)
+        file.close()
+        # use default reference files
 
 
     @staticmethod
@@ -421,6 +419,23 @@ class MetaDriver(object):
         results = tx.run(("MATCH (n:" + label + ") RETURN n")).data()
         results = _get_unique(results, key="n")
         return results
+
+    @staticmethod
+    def _get_fasta(tx):
+        """
+        Generates a string of FASTA sequences.
+
+        :param tx: Neo4j transaction
+        :return: String of FASTA sequences.
+        """
+        results = tx.run("MATCH (n:Taxon)--(m:Property {type: '16S'}) RETURN n,m").data()
+        fasta_dict = {}
+        for result in results:
+            fasta_dict[result['n']['name']] = result['m']['name']
+        fasta_string = str()
+        for key in fasta_dict:
+            fasta_string += '>' + key + '\n' + fasta_dict[key] + '\n'
+        return fasta_string
 
     @staticmethod
     def _pair_list(tx, level, mode):
