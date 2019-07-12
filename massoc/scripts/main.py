@@ -428,7 +428,7 @@ def run_neo4j(inputs, publish=False):
                                         uri=inputs['address'], filepath=inputs['fp'])
             # create dictionary from file
             # first check if this is an abundance table
-            for k in range(inputs['add']):
+            for k in range(len(inputs['add'])):
                 filepath = inputs['add'][k]
                 with open(filepath, 'r') as file:
                     # Second column name is type
