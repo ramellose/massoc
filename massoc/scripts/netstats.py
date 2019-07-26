@@ -166,6 +166,10 @@ class NetDriver(object):
         """
         if not networks:
             assocs = tx.run("MATCH (n:Association) RETURN n").data()
+            networks = list()
+            hits = tx.run("MATCH (n:Network) RETURN n").data()
+            for hit in hits:
+                networks.append(hit['n'].get('name'))
         else:
             assocs = tx.run(("WITH " + str(networks) +
                              " as names MATCH (n:Association)-->(b:Network) "
@@ -239,6 +243,10 @@ class NetDriver(object):
             assocs = tx.run("MATCH p=(n:Association)-[r]->(:Network) "
                             "WITH n, count(r) as num "
                             "WHERE num=1 RETURN n").data()
+            networks = list()
+            hits = tx.run("MATCH (n:Network) RETURN n").data()
+            for hit in hits:
+                networks.append(hit['n'].get('name'))
         else:
             assocs = list()
             for network in networks:
@@ -261,7 +269,7 @@ class NetDriver(object):
             name = 'Difference_weight'
         else:
             name = 'Difference'
-        _write_logic(tx, operation=name, networks=network, assocs=assocs)
+        _write_logic(tx, operation=name, networks=networks, assocs=assocs)
 
 
 def _write_logic(tx, operation, networks, assocs):
