@@ -434,6 +434,13 @@ def run_netstats(inputs, publish=False):
     # handler to file
     _create_logger(inputs['fp'])
     checks = str()
+    if 'pid' in inputs:
+        existing_pid = pid_exists(inputs['pid'])
+    else:
+        existing_pid = False
+    if not existing_pid:
+        start_database(inputs, publish)
+        existing_pid = True
     try:
         if publish:
             pub.sendMessage('update', msg='Starting database drivers.')
@@ -453,9 +460,11 @@ def run_netstats(inputs, publish=False):
             if 'union' in inputs['logic']:
                 pairlist['union'] = netdriver.graph_union(networks=inputs['networks'])
             if 'intersection' in inputs['logic']:
-                pairlist['intersection'] = netdriver.graph_intersection(networks=inputs['networks'])
+                pairlist['intersection'] = netdriver.graph_intersection(networks=inputs['networks'],
+                                                                        weight=inputs['weight'])
             if 'difference' in inputs['logic']:
-                pairlist['difference'] = netdriver.graph_difference(networks=inputs['networks'])
+                pairlist['difference'] = netdriver.graph_difference(networks=inputs['networks'],
+                                                                    weight=inputs['weight'])
             checks += 'Logic operations completed. \n'
             if publish:
                 pub.sendMessage('update', msg="Exporting network...")
@@ -557,7 +566,7 @@ def run_metastats(inputs, publish=False):
                         node_dict = dict()
                         name = colnames[i].rstrip()
                         if i % 5 == 0:
-                            logger.info('Working on the ' + str(i) + 'th iteration.')
+                            logger.info('Working on the ' + str(i) + 'th property.')
                         for line in lines:
                             source = line.split(sep="\t")[0].rstrip()
                             weight = None
@@ -570,7 +579,6 @@ def run_metastats(inputs, publish=False):
                             if weight != 0:
                                 node_dict[source] = {'target': target, 'weight': weight}
                         importdriver.include_nodes(nodes=node_dict, name=name, label=label)
-            importdriver.close()
         except Exception:
             logger.warning("Failed to upload properties to database.  ", exc_info=True)
     inputs['add'] = None

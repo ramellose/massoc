@@ -312,6 +312,13 @@ netstatsparser.add_argument('-l', '--logic',
                             help='Logic operations to carry out on Neo4j database with multiple networks. ',
                             choices=['union', 'intersection', 'difference'],
                             default=None)
+netstatsparser.add_argument('-w', '--weight',
+                            dest='weight',
+                            action='store_true',
+                            required=False,
+                            help='If flagged, intersections include associations with \n '
+                                 'matching partners but different weights, and differences exclude these. ',
+                            default=None)
 netstatsparser.add_argument('-net', '--networks',
                             dest='networks',
                             required=False,
