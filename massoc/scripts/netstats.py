@@ -113,7 +113,7 @@ class NetDriver(object):
             logger.error("Could not obtain graph intersection. ", exc_info=True)
         return intersection
 
-    def graph_difference(self, network=None, weight=True):
+    def graph_difference(self, networks=None, weight=True):
         """
         Returns a subgraph that contains all nodes only present in one of the selected networks.
         If no networks are specified, returns all associations that are unique across multiple networks.
@@ -125,7 +125,7 @@ class NetDriver(object):
         difference = None
         try:
             with self._driver.session() as session:
-                difference = session.read_transaction(self._get_difference, network, weight=weight)
+                difference = session.read_transaction(self._get_difference, networks, weight=weight)
         except Exception:
             logger.error("Could not obtain graph difference. ", exc_info=True)
         return difference
@@ -172,27 +172,6 @@ class NetDriver(object):
                              "WHERE b.name in names RETURN n")).data()
         assocs = _get_unique(assocs, 'n')
         _write_logic(tx, operation='Union', networks=networks, assocs=assocs)
-        edge_list = list()
-        for assoc in assocs:
-            sublist = list()
-            taxa = tx.run(("MATCH (m)--(:Association {name: '" + assoc +
-                           "'})--(n) "
-                           "WHERE (m:Taxon OR m:Agglom_Taxon) AND (n:Taxon OR n:Agglom_Taxon)"
-                           "RETURN m, n LIMIT 1")).data()
-            sublist.append(taxa[0]['m'].get('name'))
-            sublist.append(taxa[0]['n'].get('name'))
-            network = tx.run(("MATCH (:Association {name: '" + assoc +
-                              "'})--(n:Network) RETURN n")).data()
-            network_list = list()
-            for item in network:
-                network_list.append(item['n'].get('name'))
-            sublist.append(str(network_list))
-            weight = tx.run(("MATCH (n:Association {name: '" + assoc +
-                             "'}) RETURN n")).data()[0]['n'].get('weight')
-            if weight:
-                sublist.append(weight)
-            edge_list.append(sublist)
-        return edge_list
 
     @staticmethod
     def _get_intersection(tx, networks, weight):
@@ -245,30 +224,9 @@ class NetDriver(object):
         else:
             name = 'Intersection'
         _write_logic(tx, operation=name, networks=networks, assocs=assocs)
-        edge_list = list()
-        for assoc in assocs:
-            sublist = list()
-            taxa = tx.run(("MATCH (m)--(:Association {name: '" + assoc +
-                           "'})--(n) "
-                           "WHERE (m:Taxon OR m:Agglom_Taxon) AND (n:Taxon OR n:Agglom_Taxon)"
-                           "RETURN m, n LIMIT 1")).data()
-            sublist.append(taxa[0]['m'].get('name'))
-            sublist.append(taxa[0]['n'].get('name'))
-            network = tx.run(("MATCH (:Association {name: '" + assoc +
-                              "'})--(n:Network) RETURN n")).data()
-            network_list = list()
-            for item in network:
-                network_list.append(item['n'].get('name'))
-            sublist.append(str(network_list))
-            weight = tx.run(("MATCH (n:Association {name: '" + assoc +
-                             "'}) RETURN n")).data()[0]['n'].get('weight')
-            if weight:
-                sublist.append(weight)
-            edge_list.append(sublist)
-        return edge_list
 
     @staticmethod
-    def _get_difference(tx, network, weight):
+    def _get_difference(tx, networks, weight):
         """
         Accesses database to return edge list of difference of networks.
 
@@ -277,14 +235,16 @@ class NetDriver(object):
         :param weight: If false, the difference excludes associations with matching partners but different weights
         :return: Edge list of lists containing source, target, network and weight of each edge.
         """
-        if not network:
+        if not networks:
             assocs = tx.run("MATCH p=(n:Association)-[r]->(:Network) "
                             "WITH n, count(r) as num "
                             "WHERE num=1 RETURN n").data()
         else:
-            assocs = tx.run(("MATCH (n:Association)-->(:Network {name: '" + network +
-                             "'}) WITH n MATCH (n)-[r]->(:Network) WITH n, count(r) "
-                             "as num WHERE num=1 RETURN n")).data()
+            assocs = list()
+            for network in networks:
+                assocs.extend(tx.run(("MATCH (n:Association)-->(:Network {name: '" + network +
+                                 "'}) WITH n MATCH (n)-[r]->(:Network) WITH n, count(r) "
+                                 "as num WHERE num=1 RETURN n")).data())
         assocs = _get_unique(assocs, 'n')
         if weight:
             cleaned = list()
@@ -302,27 +262,7 @@ class NetDriver(object):
         else:
             name = 'Difference'
         _write_logic(tx, operation=name, networks=network, assocs=assocs)
-        edge_list = list()
-        for assoc in assocs:
-            sublist = list()
-            taxa = tx.run(("MATCH (m)--(:Association {name: '" + assoc +
-                           "'})--(n) "
-                           "WHERE (m:Taxon OR m:Agglom_Taxon) AND (n:Taxon OR n:Agglom_Taxon)"
-                           "RETURN m, n LIMIT 1")).data()
-            sublist.append(taxa[0]['m'].get('name'))
-            sublist.append(taxa[0]['n'].get('name'))
-            network = tx.run(("MATCH (:Association {name: '" + assoc +
-                              "'})--(n:Network) RETURN n")).data()
-            network_list = list()
-            for item in network:
-                network_list.append(item['n'].get('name'))
-            sublist.append(str(network_list))
-            weight = tx.run(("MATCH (n:Association {name: '" + assoc +
-                             "'}) RETURN n")).data()[0]['n'].get('weight')
-            if weight:
-                sublist.append(weight)
-            edge_list.append(sublist)
-        return edge_list
+
 
 def _write_logic(tx, operation, networks, assocs):
     """

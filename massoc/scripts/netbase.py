@@ -213,75 +213,57 @@ class ImportDriver(object):
             match = session.read_transaction(self._find_nodes, nodes)
         return match
 
-    def export_network(self, path, pairlist=None):
+    def export_network(self, path, networks=None):
         """
-        Writes network to graphML file.
+        Writes networks to graphML file.
+        If no path is given, the network is returned as a NetworkX object.
         :param path: Filepath where network is written to.
         :param pairlist: List of associations to write to disk.
+        :param networks: Names of networks to write to disk.
         :return:
         """
-        # mode = sample removed
+        results = dict()
         try:
-            g = nx.MultiGraph()
-            with self._driver.session() as session:
-                taxon_list = session.read_transaction(self._query,
-                                                      "MATCH (n)--(:Association) WHERE n:Taxon OR n:Agglom_Taxon RETURN n")
-            taxon_list = list(_get_unique(taxon_list, key='n'))
-            taxon_dict = dict()
-            for i in range(len(taxon_list)):
-                taxon_dict[taxon_list[i]] = str(i)
-                g.add_node(str(i), name=taxon_list[i])
-            edge_list = pairlist
-            # the pairlist is given by the graph_union funcs etc
-            if pairlist is None:
-                with self._driver.session() as session:
-                    edge_list = session.read_transaction(self._association_list)
-            for i in range(len(edge_list)):
-                if len(edge_list[i]) == 4:
-                    index_1 = taxon_dict[edge_list[i][0]]
-                    index_2 = taxon_dict[edge_list[i][1]]
-                    g.add_edge(index_1, index_2, source=edge_list[i][2], weight=edge_list[i][3])
-                else:
-                    index_1 = taxon_dict[edge_list[i][0]]
-                    index_2 = taxon_dict[edge_list[i][1]]
-                    g.add_edge(index_1, index_2, source=edge_list[i][2])
             with self._driver.session() as session:
                 tax_dict = session.read_transaction(self._tax_dict)
-            # necessary for networkx indexing
-            new_tax_dict = dict()
-            for item in tax_dict:
-                new_dict = dict()
-                for subdict in tax_dict[item]:
-                    if len(subdict) > 0:
-                        if list(subdict.keys())[0] in taxon_dict:
-                            new_dict[taxon_dict[list(subdict.keys())[0]]] = \
-                                subdict[list(subdict.keys())[0]]
-                new_tax_dict[item] = new_dict
-                nx.set_node_attributes(g, new_tax_dict[item], item)
             with self._driver.session() as session:
                 tax_properties = session.read_transaction(self._tax_properties)
-            attribute_dict = dict()
-            attrlist = list()
             for item in tax_properties:
-                taxon = taxon_dict[item]
-                attributes = tax_properties[item]
-                attrlist.extend(list(attributes.keys()))
-            attrlist = set(attrlist)
-            for type in attrlist:
-                attribute_dict[type] = dict()
-                for taxon in taxon_dict:
-                    attribute_dict[type][taxon_dict[taxon]] = 'None'
-            for item in tax_properties:
-                taxon = taxon_dict[item]
-                attributes = tax_properties[item]
-                for type in attributes:
-                    attribute_dict[type][taxon] = str(attributes[type])
-            for item in attribute_dict:
-                nx.set_node_attributes(g, attribute_dict[item], item)
-            g = g.to_undirected()
-            nx.write_graphml(g, path)
+                for taxon in tax_properties[item]:
+                    tax_properties[item][taxon] = str(tax_properties[item][taxon])
+            if not networks:
+                with self._driver.session() as session:
+                    networks = session.read_transaction(self._query,
+                                                          "MATCH (n:Network) RETURN n")
+                networks = list(_get_unique(networks, key='n'))
+            # create 1 network per database
+            for network in networks:
+                g = nx.MultiGraph()
+                with self._driver.session() as session:
+                    edge_list = session.read_transaction(self._association_list, network)
+                for i in range(len(edge_list)):
+                    if len(edge_list[i]) == 4:
+                        index_1 = edge_list[i][0]
+                        index_2 = edge_list[i][1]
+                        g.add_edge(index_1, index_2, source=edge_list[i][2], weight=edge_list[i][3])
+                    else:
+                        index_1 = edge_list[i][0]
+                        index_2 = edge_list[i][1]
+                        g.add_edge(index_1, index_2, source=edge_list[i][2])
+                # necessary for networkx indexing
+                for item in tax_dict:
+                    nx.set_node_attributes(g, tax_dict[item], item)
+                for item in tax_properties:
+                    nx.set_node_attributes(g, tax_properties[item], item)
+                g = g.to_undirected()
+                if path:
+                    name = path + '/' + network + '.graphml'
+                    nx.write_graphml(g, name)
+                else:
+                    results[network] = g
         except Exception:
             logger.error("Could not write database graph to GraphML file. \n", exc_info=True)
+        return results
 
     def create_association_relationships(self):
         """
@@ -724,14 +706,16 @@ class ImportDriver(object):
         return fasta_string
 
     @staticmethod
-    def _association_list(tx):
+    def _association_list(tx, network):
         """
         Returns a list of associations, as taxon1, taxon2, and, if present, weight.
 
         :param tx: Neo4j transaction
+        :param network: Name of network node
         :return: List of lists with source and target nodes, source networks and edge weights.
         """
-        associations = tx.run(("MATCH (n:Association) RETURN n")).data()
+        associations = tx.run(("MATCH (n:Association)--(:Network {name: '" + network +
+                               "'}) RETURN n")).data()
         edge_list = list()
         for assoc in associations:
             sublist = list()
@@ -836,16 +820,16 @@ class ImportDriver(object):
         tax_dict = dict()
         tax_levels = ['Kingdom', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species']
         for item in tax_levels:
-            tax_dict[item] = list()
+            tax_dict[item] = dict()
         for item in taxa:
             for level in tax_levels:
-                subdict = dict()
+                tax = None
                 level_name = tx.run("MATCH (b {name: '" + item +
                                  "'})--(n:"+ level + ") RETURN n").data()
                 if len(level_name) != 0:
-                    subdict[item] = level_name[0]['n'].get('name')
-                if len(subdict) != 0:
-                    tax_dict[level].append(subdict)
+                    tax = level_name[0]['n'].get('name')
+                if tax:
+                    tax_dict[level][item] = tax
         return tax_dict
 
     @staticmethod
@@ -856,32 +840,26 @@ class ImportDriver(object):
         :param tx: Neo4j transaction
         :return: Dictionary of dictionary of taxon properties
         """
-        taxa = tx.run("MATCH (n)--(:Association) WHERE n:Taxon OR n:Agglom_Taxon RETURN n").data()
-        taxa = _get_unique(taxa, 'n')
+        nodes = tx.run("MATCH (n)--(m:Property) WHERE n:Taxon OR n:Agglom_Taxon RETURN m").data()
+        nodes = _get_unique(nodes, 'm')
         properties = dict()
-        for taxon in taxa:
-            properties[taxon] = dict()
-            hits = tx.run("MATCH (n:Property)--(b {name: '" + taxon +
-                          "'}) WHERE b:Taxon OR b:Agglom_Taxon RETURN n").data()
+        for node in nodes:
+            property = tx.run("MATCH (m:Property) RETURN m").data()
+            property_key = property[0]['m']['type']
+            properties[property_key] = dict()
+            hits = tx.run("MATCH (b)--(n {name: '" + node +
+                          "'}) WHERE b:Taxon OR b:Agglom_Taxon RETURN b").data()
             if hits:
                 for hit in hits:
-                    properties[taxon][hit['n'].get('type')] = list()
-                for hit in hits:
-                    properties[taxon][hit['n'].get('type')].append(hit['n'].get('name'))
-            for property in properties[taxon]:
-                properties[taxon][property] = list(set(properties[taxon][property]))
-                if len(properties[taxon][property]) == 1:
-                    properties[taxon][property] = properties[taxon][property][0]
+                    properties[property_key][hit['b'].get('name')] = property[0]['m']['name']
+            for taxon in properties[property_key]:
+                if len(properties[property_key][taxon]) == 1:
                     # tries exporting property as float instead of list
                     try:
-                        properties[taxon][property] = np.round(float(properties[taxon][property]), 4)
+                        properties[property_key][taxon] = np.round(float(properties[property_key][property]), 4)
                     except ValueError:
                         pass
-        clean_properties = dict()
-        for taxon in properties:
-            if len(properties[taxon]) != 0:
-                clean_properties[taxon] = properties[taxon]
-        return clean_properties
+        return properties
 
 
 def _create_logger(filepath):

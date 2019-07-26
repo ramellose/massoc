@@ -358,7 +358,7 @@ def run_neo4j(inputs, publish=False):
             importdriver = ImportDriver(user=inputs['username'],
                                         password=inputs['password'],
                                         uri=inputs['address'], filepath=inputs['fp'])
-            importdriver.export_network(path=inputs['fp'] + '/' + inputs['output'] + ".graphml")
+            importdriver.export_network(path=inputs['fp'])
             importdriver.close()
         except Exception:
             logger.warning("Failed to write database to graphml file.  ", exc_info=True)
@@ -455,37 +455,33 @@ def run_netstats(inputs, publish=False):
         logger.warning("Failed to start database worker.  ", exc_info=True)
     try:
         # write operations here
-        pairlist = dict()
         if inputs['logic']:
             if 'union' in inputs['logic']:
-                pairlist['union'] = netdriver.graph_union(networks=inputs['networks'])
+                netdriver.graph_union(networks=inputs['networks'])
             if 'intersection' in inputs['logic']:
-                pairlist['intersection'] = netdriver.graph_intersection(networks=inputs['networks'],
-                                                                        weight=inputs['weight'])
+                netdriver.graph_intersection(networks=inputs['networks'],
+                                             weight=inputs['weight'])
             if 'difference' in inputs['logic']:
-                pairlist['difference'] = netdriver.graph_difference(networks=inputs['networks'],
-                                                                    weight=inputs['weight'])
+                netdriver.graph_difference(networks=inputs['networks'],
+                                           weight=inputs['weight'])
             checks += 'Logic operations completed. \n'
             if publish:
                 pub.sendMessage('update', msg="Exporting network...")
-            for file in pairlist:
                 if inputs['networks'] is not None:
                     names = [x.split('.')[0] for x in inputs['networks']]
                     importdriver.export_network(path=inputs['fp'] + '/' +
-                                                file + '_' + "_".join(names) + '.graphml',
-                                                pairlist=pairlist[file])
+                                                "_".join(names) + '.graphml')
                     logger.info("Exporting networks to: " + inputs['fp'] + '/' +
-                                file + '_' + "_".join(names) + '.graphml')
+                                "_".join(names) + '.graphml')
                     checks += "Exporting networks to: " + inputs['fp'] + '/' +\
-                              file + '_' + "_".join(names) + '.graphml' "\n"
+                              "_".join(names) + '.graphml' "\n"
                 else:
                     importdriver.export_network(path=inputs['fp'] + '/' +
-                                                     file + '_complete.graphml',
-                                                pairlist=pairlist[file])
+                                                      '_complete.graphml')
                     logger.info("Exporting networks to: " + inputs['fp'] + '/' +
-                                file + '_complete.graphml')
+                                '_complete.graphml')
                     checks += "Exporting networks to: " + inputs['fp'] + '/' +\
-                              file + '_complete.graphml' "\n"
+                              '_complete.graphml' "\n"
         else:
             logger.warning("No logic operation specified!")
         if publish:
