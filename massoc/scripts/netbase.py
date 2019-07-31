@@ -101,8 +101,9 @@ class ImportDriver(object):
                 self.convert_biom(biomfile, exp_id)
                 with self._driver.session() as session:
                     for net in nets.networks:
+                        name = net.split('.')[0]
                         self.convert_networkx(network=nets.networks[net],
-                                              network_id=net, mode='weight', exp_id=exp_id)
+                                              network_id=name, mode='weight', exp_id=exp_id)
         except Exception:
             logger.error("Could not port network object to database. \n", exc_info=True)
 
@@ -235,21 +236,18 @@ class ImportDriver(object):
                 with self._driver.session() as session:
                     networks = session.read_transaction(self._query,
                                                           "MATCH (n:Network) RETURN n")
+                    networks.extend(session.read_transaction(self._query,
+                                                          "MATCH (n:Set) RETURN n"))
                 networks = list(_get_unique(networks, key='n'))
             # create 1 network per database
             for network in networks:
                 g = nx.MultiGraph()
                 with self._driver.session() as session:
                     edge_list = session.read_transaction(self._association_list, network)
-                for i in range(len(edge_list)):
-                    if len(edge_list[i]) == 4:
-                        index_1 = edge_list[i][0]
-                        index_2 = edge_list[i][1]
-                        g.add_edge(index_1, index_2, source=edge_list[i][2], weight=edge_list[i][3])
-                    else:
-                        index_1 = edge_list[i][0]
-                        index_2 = edge_list[i][1]
-                        g.add_edge(index_1, index_2, source=edge_list[i][2])
+                for i in range(len(edge_list[0])):
+                    index_1 = edge_list[0][i]
+                    index_2 = edge_list[1][i]
+                    g.add_edge(index_1, index_2, source=str(edge_list[2][i]), weight=str(edge_list[3][i]))
                 # necessary for networkx indexing
                 for item in tax_dict:
                     nx.set_node_attributes(g, tax_dict[item], item)
@@ -714,31 +712,46 @@ class ImportDriver(object):
         :param network: Name of network node
         :return: List of lists with source and target nodes, source networks and edge weights.
         """
-        associations = tx.run(("MATCH (n:Association)--(:Network {name: '" + network +
+        associations = tx.run(("MATCH (n:Association)--(b {name: '" + network +
                                "'}) RETURN n")).data()
-        edge_list = list()
+        sources = list()
+        targets = list()
+        networks = list()
+        weights = list()
         for assoc in associations:
-            sublist = list()
             taxa = tx.run(("MATCH (m)--(:Association {name: '" + assoc['n'].get('name') +
                            "'})--(n) "
                            "WHERE (m:Taxon OR m:Agglom_Taxon) AND (n:Taxon OR n:Agglom_Taxon)"
                            "RETURN m, n LIMIT 1")).data()
-            if len(taxa)== 0:
-                pass # apparently this can happen. Need to figure out why!!
+            if len(taxa) == 0:
+                pass  # apparently this can happen. Need to figure out why!!
             else:
-                sublist.append(taxa[0]['m'].get('name'))
-                sublist.append(taxa[0]['n'].get('name'))
+                source = taxa[0]['m'].get('name')
+                target = taxa[0]['n'].get('name')
                 network = tx.run(("MATCH (:Association {name: '" + assoc['n'].get('name') +
-                               "'})-->(n:Network) RETURN n"))
+                                  "'})-->(n:Network) RETURN n"))
                 network = _get_unique(network, key='n')
                 network_list = list()
                 for item in network:
                     network_list.append(item)
-                sublist.append(str(network_list))
-                weight = assoc['n'].get('weight')
-                if weight:
-                    sublist.append(weight)
-                edge_list.append(sublist)
+                weight = [assoc['n'].get('weight')]
+                # it is possible for sets to contain associations with different weights
+                if source in sources:
+                    for hit in np.where(source in sources)[0]:
+                        if targets[hit] == target:
+                            networks[hit].append(network_list)
+                            weights[hit].append(weight)
+                elif source in targets:
+                    for hit in np.where(source in targets)[0]:
+                        if sources[hit] == target:
+                            networks[hit].append(network_list)
+                            weights[hit].append(weight)
+                else:
+                    sources.append(source)
+                    targets.append(target)
+                    networks.append(network_list)
+                    weights.append(weight)
+        edge_list = [sources, targets, networks, weights]
         return edge_list
 
     @staticmethod

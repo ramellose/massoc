@@ -164,16 +164,9 @@ class NetDriver(object):
         :param networks: List of network names
         :return: Edge list of lists containing source, target, network and weight of each edge.
         """
-        if not networks:
-            assocs = tx.run("MATCH (n:Association) RETURN n").data()
-            networks = list()
-            hits = tx.run("MATCH (n:Network) RETURN n").data()
-            for hit in hits:
-                networks.append(hit['n'].get('name'))
-        else:
-            assocs = tx.run(("WITH " + str(networks) +
-                             " as names MATCH (n:Association)-->(b:Network) "
-                             "WHERE b.name in names RETURN n")).data()
+        assocs = tx.run(("WITH " + str(networks) +
+                         " as names MATCH (n:Association)-->(b:Network) "
+                         "WHERE b.name in names RETURN n")).data()
         assocs = _get_unique(assocs, 'n')
         _write_logic(tx, operation='Union', networks=networks, assocs=assocs)
 
@@ -187,11 +180,6 @@ class NetDriver(object):
         :param weight: If false, the intersection includes associations with matching partners but different weights
         :return: Edge list of lists containing source, target, network and weight of each edge.
         """
-        if not networks:
-            networks = list()
-            hits = tx.run("MATCH (n:Network) RETURN n").data()
-            for hit in hits:
-                networks.append(hit['n'].get('name'))
         queries = list()
         for node in networks:
             queries.append(("MATCH (n:Association)-->(:Network {name: '" +
@@ -239,20 +227,11 @@ class NetDriver(object):
         :param weight: If false, the difference excludes associations with matching partners but different weights
         :return: Edge list of lists containing source, target, network and weight of each edge.
         """
-        if not networks:
-            assocs = tx.run("MATCH p=(n:Association)-[r]->(:Network) "
-                            "WITH n, count(r) as num "
-                            "WHERE num=1 RETURN n").data()
-            networks = list()
-            hits = tx.run("MATCH (n:Network) RETURN n").data()
-            for hit in hits:
-                networks.append(hit['n'].get('name'))
-        else:
-            assocs = list()
-            for network in networks:
-                assocs.extend(tx.run(("MATCH (n:Association)-->(:Network {name: '" + network +
-                                 "'}) WITH n MATCH (n)-[r]->(:Network) WITH n, count(r) "
-                                 "as num WHERE num=1 RETURN n")).data())
+        assocs = list()
+        for network in networks:
+            assocs.extend(tx.run(("MATCH (n:Association)-->(:Network {name: '" + network +
+                                  "'}) WITH n MATCH (n)-[r]->(:Network) WITH n, count(r) "
+                                  "as num WHERE num=1 RETURN n")).data())
         assocs = _get_unique(assocs, 'n')
         if weight:
             cleaned = list()
@@ -283,14 +262,13 @@ def _write_logic(tx, operation, networks, assocs):
     :return:
     """
     name = operation + '_' + '_'.join(networks)
-    tx.run("CREATE (n:Network {name: $id}) "
+    tx.run("CREATE (n:Set {name: $id}) "
            "RETURN n", id=name)
     for assoc in assocs:
-        tx.run(("MATCH (a:Association), (b:Network) "
-                "WHERE a.name = '" +
+        tx.run(("MATCH (a:Association), (b:Set) WHERE a.name = '" +
                 assoc +
                 "' AND b.name = '" + name +
-                "' CREATE (a)-[r:IN_NETWORK]->(b) "
+                "' CREATE (a)-[r:IN_SET]->(b) "
                 "RETURN type(r)"))
 
 

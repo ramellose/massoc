@@ -406,7 +406,7 @@ def run_neo4j(inputs, publish=False):
                 subnames = item.split('/')
                 if len(subnames) == 1:
                     subnames = item.split('\\')
-                name = subnames[-1]
+                name = subnames[-1].split('.')[0]
                 importdriver.convert_networkx(network=network, network_id=name, mode='weight')
                 itemlist.append(item)
         except Exception:
@@ -456,13 +456,20 @@ def run_netstats(inputs, publish=False):
     try:
         # write operations here
         if inputs['logic']:
+            if not inputs['networks']:
+                networks = list()
+                hits = importdriver.custom_query("MATCH (n:Network) RETURN n")
+                for hit in hits:
+                    networks.append(hit['n'].get('name'))
+            else:
+                networks = inputs['networks']
             if 'union' in inputs['logic']:
-                netdriver.graph_union(networks=inputs['networks'])
+                netdriver.graph_union(networks=networks)
             if 'intersection' in inputs['logic']:
-                netdriver.graph_intersection(networks=inputs['networks'],
+                netdriver.graph_intersection(networks=networks,
                                              weight=inputs['weight'])
             if 'difference' in inputs['logic']:
-                netdriver.graph_difference(networks=inputs['networks'],
+                netdriver.graph_difference(networks=networks,
                                            weight=inputs['weight'])
             checks += 'Logic operations completed. \n'
             if publish:
