@@ -14,6 +14,7 @@ __license__ = 'Apache 2.0'
 from neo4j.v1 import GraphDatabase
 import sys
 import logging.handlers
+from itertools import combinations
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -171,23 +172,35 @@ class NetDriver(object):
         _write_logic(tx, operation='Union', networks=networks, assocs=assocs)
 
     @staticmethod
-    def _get_intersection(tx, networks, weight):
+    def _get_intersection(tx, networks, weight, n):
         """
         Accesses database to return edge list of intersection of networks.
 
         :param tx: Neo4j transaction
         :param networks: List of network names
         :param weight: If false, the intersection includes associations with matching partners but different weights
+        :param n: If specified, number of networks that the intersecting node should be in
         :return: Edge list of lists containing source, target, network and weight of each edge.
         """
         queries = list()
-        for node in networks:
-            queries.append(("MATCH (n:Association)-->(:Network {name: '" +
-                            node + "'}) "))
-
-        query = " ".join(queries) + "RETURN n"
-        assocs = tx.run(query).data()
-        assocs = list(_get_unique(assocs, 'n'))
+        if not n:
+            for node in networks:
+                queries.append(("MATCH (n:Association)-->(:Network {name: '" +
+                                node + "'}) "))
+            query = " ".join(queries) + "RETURN n"
+            assocs = tx.run(query).data()
+            assocs = list(_get_unique(assocs, 'n'))
+        else:
+            assocs = list()
+            combos = combinations(networks, n)
+            for combo in combos:
+                for node in combo:
+                    queries.append(("MATCH (n:Association)-->(:Network {name: '" +
+                                    node + "'}) "))
+                query = " ".join(queries) + "RETURN n"
+                combo_assocs = tx.run(query).data()
+                combo_assocs = list(_get_unique(combo_assocs, 'n'))
+                assocs.append(combo_assocs)
         if weight:
             query = ("MATCH (a)-[:WITH_TAXON]-(n:Association)-[:WITH_TAXON]-(b) "
                      "MATCH (a)-[:WITH_TAXON]-(m:Association)-[:WITH_TAXON]-(b) "

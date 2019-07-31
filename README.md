@@ -92,7 +92,7 @@ The graph database utilities are built on Neo4j.
 Download the Neo4j Server community edition from [here](https://neo4j.com/download-center/#releases).
 
 Extract the files from the distribution.
-On Windows,  run <b>bin\neo4j.bat console</b>to initialize the server.
+On Windows,  run <b>bin\neo4j.bat console</b> to initialize the server.
 
 On Linux, first set your default Java version to 1.8.0:
 ```

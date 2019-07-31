@@ -467,7 +467,7 @@ def run_netstats(inputs, publish=False):
                 netdriver.graph_union(networks=networks)
             if 'intersection' in inputs['logic']:
                 netdriver.graph_intersection(networks=networks,
-                                             weight=inputs['weight'])
+                                             weight=inputs['weight'], n=inputs['num'])
             if 'difference' in inputs['logic']:
                 netdriver.graph_difference(networks=networks,
                                            weight=inputs['weight'])

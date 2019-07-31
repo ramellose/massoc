@@ -316,7 +316,7 @@ netstatsparser.add_argument('-w', '--weight',
                             dest='weight',
                             action='store_true',
                             required=False,
-                            help='If flagged, intersections include associations with \n '
+                            help='If flagged, intersections include associations with\n '
                                  'matching partners but different weights, and differences exclude these. ',
                             default=None)
 netstatsparser.add_argument('-net', '--networks',
@@ -324,7 +324,13 @@ netstatsparser.add_argument('-net', '--networks',
                             required=False,
                             action='store_true',
                             default=None,
-                            help='Carry out logic operations on a subset of networks in the database.'
+                            help='Intersection-only option that returns the intersection for \n'
+                                 'any n-combination of the specified networks.')
+netstatsparser.add_argument('-n', '--num',
+                            dest='num',
+                            required=False,
+                            default=None,
+                            help='Carry out set operations on a subset of networks in the database.'
                                  '\n Make sure supplied names match the network node labels.')
 netstatsparser.add_argument('-fp', '--output_filepath',
                             dest='fp',
