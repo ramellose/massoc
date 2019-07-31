@@ -741,11 +741,21 @@ class ImportDriver(object):
                         if targets[hit] == target:
                             networks[hit].append(network_list)
                             weights[hit].append(weight)
+                        else:
+                            sources.append(source)
+                            targets.append(target)
+                            networks.append(network_list)
+                            weights.append(weight)
                 elif source in targets:
                     for hit in np.where(source in targets)[0]:
                         if sources[hit] == target:
                             networks[hit].append(network_list)
                             weights[hit].append(weight)
+                        else:
+                            sources.append(source)
+                            targets.append(target)
+                            networks.append(network_list)
+                            weights.append(weight)
                 else:
                     sources.append(source)
                     targets.append(target)
