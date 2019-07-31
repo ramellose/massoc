@@ -739,8 +739,10 @@ class ImportDriver(object):
                 if source in sources:
                     for hit in np.where(source in sources)[0]:
                         if targets[hit] == target:
-                            networks[hit].append(network_list)
-                            weights[hit].append(weight)
+                            network_list.extend(networks[hit])
+                            networks[hit] = set(network_list)
+                            weight.extend(weights[hit])
+                            weights[hit] = set(weight)
                         else:
                             sources.append(source)
                             targets.append(target)
@@ -749,8 +751,10 @@ class ImportDriver(object):
                 elif source in targets:
                     for hit in np.where(source in targets)[0]:
                         if sources[hit] == target:
-                            networks[hit].append(network_list)
-                            weights[hit].append(weight)
+                            network_list.extend(networks[hit])
+                            networks[hit] = set(network_list)
+                            weight.extend(weights[hit])
+                            weights[hit] = set(weight)
                         else:
                             sources.append(source)
                             targets.append(target)
