@@ -38,7 +38,7 @@ logger.addHandler(sh)
 def massoc(massoc_args):
     """
     Main function for running massoc. 
-    :param argv: Parameters generated through massoc_parser.
+    :param massoc_args: Parameters generated through massoc_parser.
     :return: 
     """
     if 'input' in massoc_args:
@@ -286,11 +286,6 @@ neo4jparser.add_argument('-j', '--job',
                               'start: Start local database. \n'
                               'upload: Upload BIOM file(s) in settings to the database. \n'
                               'write: Export Cytoscape-compatible file from the database.')
-neo4jparser.add_argument('-add', '--additional_data',
-                         dest='add',
-                         required=False,
-                         default=None,
-                         help='Filepath to edge list that will be uploaded to the Neo4j database.')
 neo4jparser.add_argument('-o', '-output',
                          dest='output',
                          required=False,
@@ -317,6 +312,13 @@ netstatsparser.add_argument('-l', '--logic',
                             help='Logic operations to carry out on Neo4j database with multiple networks. ',
                             choices=['union', 'intersection', 'difference'],
                             default=None)
+netstatsparser.add_argument('-w', '--weight',
+                            dest='weight',
+                            action='store_true',
+                            required=False,
+                            help='If flagged, intersections include associations with \n '
+                                 'matching partners but different weights, and differences exclude these. ',
+                            default=None)
 netstatsparser.add_argument('-net', '--networks',
                             dest='networks',
                             required=False,
@@ -336,6 +338,29 @@ metastatsparser = subparsers.add_parser('metastats', description='Network meta-a
                                              'this module carries out network analyses that incorporate'
                                              ' provided metadata. Such metadata can include taxonomic data,'
                                              ' or it can include nodes with specific labels. ')
+metastatsparser.add_argument('-add', '--additional_data',
+                             dest='add',
+                             required=False,
+                             default=None,
+                             nargs='+',
+                             help='Filepath to edge list or table that will be uploaded to the Neo4j database. \n'
+                             'If the file is a table, the first column should be of nodes inside the database. \n'
+                             'If the column header does not match the network label, (e.g. #SampleID instead of Sample) \n'
+                             'specify this with the type argument.')
+metastatsparser.add_argument('-abn', '--abundance_data',
+                             dest='abundance',
+                             required=False,
+                             default=None,
+                             nargs='+',
+                             help='If you are adding metadata that is an abundance table,'
+                             ' specify the type of data (e.g. KO terms) here. ')
+metastatsparser.add_argument('-type', '--annotation_type',
+                             dest='type',
+                             help='Node label used in place of 1st column header. \n'
+                             'This label (e.g. Sample) should be specified when using QIITA files,\n'
+                             'or other tables that have a # in front of the column names. ',
+                             default=None,
+                             type=str, )
 metastatsparser.add_argument('-tax', '--tax_agglomeration',
                              dest='agglom',
                              help='Taxonomic level used for network agglomeration.',
@@ -357,6 +382,11 @@ metastatsparser.add_argument('-fp', '--output_filepath',
                              dest='fp',
                              help='Filepath for saving output files and reading settings.',
                              default=os.getcwd())
+metastatsparser.add_argument('-s', '--sequence',
+                             dest='sequence',
+                             required=False,
+                             type=str,
+                             help='Location of 16S sequences (e.g. GreenGenes folder containing FASTA files).')
 metastatsparser.set_defaults(metastats=True)
 
 

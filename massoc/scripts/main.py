@@ -61,6 +61,10 @@ def get_input(inputs, publish=False):
 
     All files are written to BIOM files, while a settings file is also written to disk
     for use by other massoc commands.
+
+    :param inputs: Dictionary of inputs.
+    :param publish: If True, publishes messages to be received by GUI.
+    :return:
     """
     # handler to file
     # construct logger after filepath is provided
@@ -162,29 +166,39 @@ def get_input(inputs, publish=False):
         bioms.cluster_biom()
     if inputs['split'] is not None and inputs['split'] is not 'TRUE':
         bioms.split_biom()
+    logger.info('Collapsing taxonomy... ')
+    bioms.collapse_tax()
     if inputs['min'] is not None:
         if publish:
             pub.sendMessage('update', msg='Setting minimum mean abundance...')
         logger.info('Removing taxa below minimum count... ')
         bioms.prev_filter(mode='min')
-    if inputs['rar'] is not None:
-        if publish:
-            pub.sendMessage('update', msg='Rarefying counts...')
-        logger.info('Rarefying counts... ')
-        bioms.rarefy()
     if inputs['prev'] is not None:
         if publish:
             pub.sendMessage('update', msg='Setting prevalence filter...')
         logger.info('Setting prevalence filter... ')
         bioms.prev_filter(mode='prev')
-    logger.info('Collapsing taxonomy... ')
-    bioms.collapse_tax()
+    if inputs['rar'] is not None:
+        if publish:
+            pub.sendMessage('update', msg='Rarefying counts...')
+        logger.info('Rarefying counts... ')
+        bioms.rarefy()
     bioms.inputs['procbioms'] = dict()
+    if 'otu' not in bioms.inputs['levels']: # add otu level always
+        bioms.inputs['procbioms']['otu'] = dict()
+        for name in bioms.inputs['name']:
+            biomname = bioms.inputs['fp'] + '/' + name + '_' + 'otu' + '.hdf5'
+            bioms.inputs['procbioms']['otu'][name] = biomname
     for level in bioms.inputs['levels']:
         bioms.inputs['procbioms'][level] = dict()
         for name in bioms.inputs['name']:
             biomname = bioms.inputs['fp'] + '/' + name + '_' + level + '.hdf5'
             bioms.inputs['procbioms'][level][name] = biomname
+    all_bioms = {**bioms.otu, **bioms.genus, **bioms.family, **bioms.order,
+                 **bioms.class_, **bioms.phylum}
+    for biomfile in all_bioms:
+        if all_bioms[biomfile].shape[0] == 1:
+            logger.error("The current preprocessing steps resulted in BIOM files with only 1 row.", exc_info=True)
     if inputs['network'] is not None:
         if publish:
             pub.sendMessage('update', msg='Checking previously generated networks...')
@@ -229,12 +243,16 @@ def get_input(inputs, publish=False):
 def run_network(inputs, publish=False):
     """
     Pipes functions from the different massoc modules to run complete network inference.
+
+    :param inputs: Dictionary of inputs.
+    :param publish: If True, publishes messages to be received by GUI.
+    :return:
     """
+    _create_logger(inputs['fp'])
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
     old_inputs.update(inputs)
     inputs = old_inputs
     # handler to file
-    _create_logger(inputs['fp'])
     filestore = read_bioms(inputs['procbioms'])
     bioms = Batch(filestore, inputs)
     bioms = Nets(bioms)
@@ -263,10 +281,17 @@ def run_network(inputs, publish=False):
 
 
 def run_neo4j(inputs, publish=False):
+    """
+    Starts and carries out operations on the Neo4j database.
+
+    :param inputs: Dictionary of inputs.
+    :param publish: If True, publishes messages to be received by GUI.
+    :return:
+    """
+    _create_logger(inputs['fp'])
     # overwritten settings should be retained
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
     # handler to file
-    _create_logger(inputs['fp'])
     # check if password etc is already there
     if 'username' in old_inputs:
         logins = dict((k, old_inputs[k]) for k in ('username', 'password', 'address', 'neo4j'))
@@ -282,6 +307,7 @@ def run_neo4j(inputs, publish=False):
     if inputs['job'] == 'start':
         if not existing_pid:
             start_database(inputs, publish)
+            existing_pid = True
         else:
             logger.info("Database is already running.  ")
     elif inputs['job'] == 'quit':
@@ -311,6 +337,7 @@ def run_neo4j(inputs, publish=False):
     elif inputs['job'] == 'clear':
         if not existing_pid:
             start_database(inputs, publish)
+            existing_pid = True
         try:
             if publish:
                 pub.sendMessage('update', msg='Clearing database...')
@@ -324,19 +351,21 @@ def run_neo4j(inputs, publish=False):
     elif inputs['job'] == 'write':
         if not existing_pid:
             start_database(inputs, publish)
+            existing_pid = True
         try:
             if publish:
                 pub.sendMessage('update', msg='Accessing database...')
             importdriver = ImportDriver(user=inputs['username'],
                                         password=inputs['password'],
                                         uri=inputs['address'], filepath=inputs['fp'])
-            importdriver.export_network(path=inputs['fp'] + '/' + inputs['output'] + ".graphml")
+            importdriver.export_network(path=inputs['fp'])
             importdriver.close()
         except Exception:
             logger.warning("Failed to write database to graphml file.  ", exc_info=True)
     else:
         if not existing_pid:
             start_database(inputs, publish)
+            existing_pid = True
         if publish:
             pub.sendMessage('update', msg='Uploading files to database...')
         filestore = read_bioms(inputs['procbioms'])
@@ -377,7 +406,7 @@ def run_neo4j(inputs, publish=False):
                 subnames = item.split('/')
                 if len(subnames) == 1:
                     subnames = item.split('\\')
-                name = subnames[-1]
+                name = subnames[-1].split('.')[0]
                 importdriver.convert_networkx(network=network, network_id=name, mode='weight')
                 itemlist.append(item)
         except Exception:
@@ -386,45 +415,32 @@ def run_neo4j(inputs, publish=False):
         if publish:
             pub.sendMessage('database_log', msg=checks)
         importdriver.close()
-    if inputs['add']:
-        if not existing_pid:
-            start_database(inputs, publish)
-        try:
-            if publish:
-                pub.sendMessage('update', msg='Uploading files to database...')
-            importdriver = ImportDriver(user=inputs['username'],
-                                        password=inputs['password'],
-                                        uri=inputs['address'], filepath=inputs['fp'])
-            node_dict = dict()
-            # create dictionary from file
-            for filepath in inputs['add']:
-                with open(filepath, 'r') as file:
-                    # Second column name is type
-                    # Newline is cutoff
-                    colnames = file.readline().split(sep="\t")
-                    label = colnames[0].rstrip()
-                    name = colnames[1].rstrip()
-                    for line in file:
-                        source = line.split(sep="\t")[0].rstrip()
-                        target = line.split(sep="\t")[1].rstrip()
-                        node_dict[source] = target
-                importdriver.include_nodes(nodes=inputs['add'], name=name, label=label)
-                importdriver.close()
-        except Exception:
-            logger.warning("Failed to upload properties to database.  ", exc_info=True)
     logger.info('Completed database operations!  ')
-    inputs['add'] = None
-    # prevents reuploading
     write_settings(inputs)
 
 
 def run_netstats(inputs, publish=False):
+    """
+    Runs statistical analyses on the Neo4j database, as well as logic operations.
+    To do: null models.
+
+    :param inputs: Dictionary of inputs.
+    :param publish: If True, publishes messages to be received by GUI.
+    :return:
+    """
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
     old_inputs.update(inputs)
     inputs = old_inputs
     # handler to file
     _create_logger(inputs['fp'])
     checks = str()
+    if 'pid' in inputs:
+        existing_pid = pid_exists(inputs['pid'])
+    else:
+        existing_pid = False
+    if not existing_pid:
+        start_database(inputs, publish)
+        existing_pid = True
     try:
         if publish:
             pub.sendMessage('update', msg='Starting database drivers.')
@@ -439,35 +455,40 @@ def run_netstats(inputs, publish=False):
         logger.warning("Failed to start database worker.  ", exc_info=True)
     try:
         # write operations here
-        pairlist = dict()
         if inputs['logic']:
+            if not inputs['networks']:
+                networks = list()
+                hits = importdriver.custom_query("MATCH (n:Network) RETURN n")
+                for hit in hits:
+                    networks.append(hit['n'].get('name'))
+            else:
+                networks = inputs['networks']
             if 'union' in inputs['logic']:
-                pairlist['union'] = netdriver.graph_union(networks=inputs['networks'])
+                netdriver.graph_union(networks=networks)
             if 'intersection' in inputs['logic']:
-                pairlist['intersection'] = netdriver.graph_intersection(networks=inputs['networks'])
+                netdriver.graph_intersection(networks=networks,
+                                             weight=inputs['weight'])
             if 'difference' in inputs['logic']:
-                pairlist['difference'] = netdriver.graph_difference(networks=inputs['networks'])
+                netdriver.graph_difference(networks=networks,
+                                           weight=inputs['weight'])
             checks += 'Logic operations completed. \n'
             if publish:
                 pub.sendMessage('update', msg="Exporting network...")
-            for file in pairlist:
                 if inputs['networks'] is not None:
                     names = [x.split('.')[0] for x in inputs['networks']]
                     importdriver.export_network(path=inputs['fp'] + '/' +
-                                                file + '_' + "_".join(names) + '.graphml',
-                                                pairlist=pairlist[file])
+                                                "_".join(names) + '.graphml')
                     logger.info("Exporting networks to: " + inputs['fp'] + '/' +
-                                file + '_' + "_".join(names) + '.graphml')
+                                "_".join(names) + '.graphml')
                     checks += "Exporting networks to: " + inputs['fp'] + '/' +\
-                              file + '_' + "_".join(names) + '.graphml' "\n"
+                              "_".join(names) + '.graphml' "\n"
                 else:
                     importdriver.export_network(path=inputs['fp'] + '/' +
-                                                     file + '_complete.graphml',
-                                                pairlist=pairlist[file])
+                                                      '_complete.graphml')
                     logger.info("Exporting networks to: " + inputs['fp'] + '/' +
-                                file + '_complete.graphml')
+                                '_complete.graphml')
                     checks += "Exporting networks to: " + inputs['fp'] + '/' +\
-                              file + '_complete.graphml' "\n"
+                              '_complete.graphml' "\n"
         else:
             logger.warning("No logic operation specified!")
         if publish:
@@ -479,11 +500,21 @@ def run_netstats(inputs, publish=False):
         checks += 'Failed to run database worker. \n'
     if publish:
         pub.sendMessage('database_log', msg=checks)
+    importdriver.close()
+    netdriver.close()
     logger.info('Completed netstats operations!  ')
     write_settings(inputs)
 
 
 def run_metastats(inputs, publish=False):
+    """
+    Module that carries out analysis of metadata on the database.
+    This module also interfaces with external APIs to pull in additional metadata.
+
+    :param inputs: Dictionary of inputs.
+    :param publish: If True, publishes messages to be received by GUI.
+    :return:
+    """
     old_inputs = read_settings(inputs['fp'] + '/settings.json')
     old_inputs.update(inputs)
     inputs = old_inputs
@@ -498,8 +529,64 @@ def run_metastats(inputs, publish=False):
                                 password=inputs['password'],
                                 uri=inputs['address'],
                                 filepath=inputs['fp'])
+        importdriver = ImportDriver(user=inputs['username'],
+                              password=inputs['password'],
+                              uri=inputs['address'],
+                              filepath=inputs['fp'])
     except Exception:
         logger.warning("Failed to start database worker.  ", exc_info=True)
+    if inputs['sequence']:
+        try:
+            logger.info('Uploading sequences to database...')
+            if publish:
+                pub.sendMessage('update', msg='Uploading sequences to database...')
+            importdriver.include_sequences(inputs['sequence'])
+        except Exception:
+            logger.warning("Failed to upload sequences to database.  ", exc_info=True)
+    if inputs['add']:
+        try:
+            logger.info('Uploading additional properties...  ')
+            if publish:
+                pub.sendMessage('update', msg='Uploading files to database...')
+            # create dictionary from file
+            # first check if this is an abundance table
+            for k in range(len(inputs['add'])):
+                filepath = inputs['add'][k]
+                with open(filepath, 'r') as file:
+                    # Second column name is type
+                    # Newline is cutoff
+                    colnames = file.readline().split(sep="\t")
+                    lines = file.readlines()[1:]
+                    if not inputs['type']:
+                        label = colnames[0].rstrip()
+                    else:
+                        label = inputs['type']
+                    # if the supplied file is a dataframe,
+                    # treat first column as source and rest as target
+                    logger.info('Found ' + str(len(colnames)) + ' properties.')
+                    for i in range(1, len(colnames)):
+                        # give a logger update every 5th property
+                        node_dict = dict()
+                        name = colnames[i].rstrip()
+                        if i % 5 == 0:
+                            logger.info('Working on the ' + str(i) + 'th property.')
+                        for line in lines:
+                            source = line.split(sep="\t")[0].rstrip()
+                            weight = None
+                            if inputs['abundance']:
+                                target = colnames[i].rstrip()
+                                name = inputs['abundance'][k]
+                                weight = line.split(sep="\t")[i].rstrip()
+                            else:
+                                target = line.split(sep="\t")[i].rstrip()
+                            if weight != 0:
+                                node_dict[source] = {'target': target, 'weight': weight}
+                        importdriver.include_nodes(nodes=node_dict, name=name, label=label)
+        except Exception:
+            logger.warning("Failed to upload properties to database.  ", exc_info=True)
+    inputs['add'] = None
+    inputs['type'] = None
+    # prevents reuploading
     try:
         # write operations here
         if inputs['agglom']:
@@ -535,13 +622,22 @@ def run_metastats(inputs, publish=False):
         checks += 'Failed to compute metadata associations. \n'
     if publish:
         pub.sendMessage('database_log', msg=checks)
+    # functions to include:
+    # include_sequences
+    metadriver.close()
+    importdriver.close()
     logger.info('Completed metastats operations!  ')
     write_settings(inputs)
 
 
 def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller.
-     Source: https://stackoverflow.com/questions/7674790/bundling-data-files-with-pyinstaller-onefile"""
+    """
+    Get absolute path to resource, works for dev and for PyInstaller.
+    Source: https://stackoverflow.com/questions/7674790/bundling-data-files-with-pyinstaller-onefile
+
+    :param relative_path: Path to MEI location.
+    :return:
+    """
     try:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
@@ -551,7 +647,13 @@ def resource_path(relative_path):
 
 
 def start_database(inputs, publish):
-    '''Starts Neo4j database. '''
+    """
+    Starts Neo4j database.
+
+    :param inputs: Dictionary of inputs.
+    :param publish: If True, publishes messages to be received by GUI.
+    :return:
+    """
     try:
         if publish:
             pub.sendMessage('update', msg='Starting database...')
@@ -576,8 +678,13 @@ def start_database(inputs, publish):
 
 
 def _create_logger(filepath):
-    """ After a filepath has become available, loggers can be created
-    when required to report on errors. """
+    """
+    After a filepath has become available, loggers can be created
+    when required to report on errors.
+
+    :param filepath: Filepath where logs will be written.
+    :return:
+    """
     logpath = filepath + '/massoc.log'
     # filelog path is one folder above massoc
     # pyinstaller creates a temporary folder, so log would be deleted

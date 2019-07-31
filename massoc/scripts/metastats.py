@@ -16,6 +16,7 @@ from uuid import uuid4
 from scipy.stats import hypergeom, spearmanr
 import sys
 import logging.handlers
+import os
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -31,6 +32,15 @@ logger.addHandler(sh)
 class MetaDriver(object):
 
     def __init__(self, uri, user, password, filepath):
+        """
+        Initializes a driver for accessing the Neo4j database.
+        This driver interfaces with external databases and supports metadata analysis.
+
+        :param uri: Adress of Neo4j database
+        :param user: Username for Neo4j database
+        :param password: Password for Neo4j database
+        :param filepath: Filepath where logs will be written.
+        """
         _create_logger(filepath)
         try:
             self._driver = GraphDatabase.driver(uri, auth=(user, password))
@@ -39,11 +49,18 @@ class MetaDriver(object):
             exit()
 
     def close(self):
-        """Closes the connection to the database."""
+        """
+        Closes the connection to the database.
+        :return:
+        """
         self._driver.close()
 
     def custom_query(self, query):
-        """Accepts a query and provides the results."""
+        """
+        Accepts a query and provides the results.
+        :param query: String containing Cypher query
+        :return: Results of transaction with Cypher query
+        """
         try:
             with self._driver.session() as session:
                 output = session.read_transaction(self._query, query)
@@ -51,9 +68,9 @@ class MetaDriver(object):
         except Exception:
             logger.error("Unable to execute query: " + query + '\n', exc_info=True)
 
-
     def agglomerate_network(self, level=None, mode='weight'):
-        """Agglomerates to specified level, or, if no level is specified,
+        """
+        Agglomerates to specified taxonomic level, or, if no level is specified,
         over all levels. Associations are agglomerated based on similarity
         at the specified taxonomic level. If the mode is set to 'weight',
         associations are only agglomerated if their weight matches.
@@ -61,7 +78,11 @@ class MetaDriver(object):
         as soon as no pair meets the qualification, agglomeration is terminated.
 
         By default, agglomeration is done separately
-        per network in the database."""
+        per network in the database.
+        :param level: Taxonomic level matching taxonomic assignments in Neo4j database
+        :param mode: if 'weight', takes association weight into account
+        :return:
+        """
         try:
             stop_condition = False
             while not stop_condition:
@@ -101,16 +122,33 @@ class MetaDriver(object):
             logger.error("Could not agglomerate associations to higher taxonomic levels. \n", exc_info=True)
 
     def get_pairlist(self, level, mode):
-        """Starts a new transaction for every pair list request."""
+        """
+        Starts a new transaction for every pair list request.
+        A pair is defined as two associations linked to taxonomic nodes
+        that have the same taxonomic assignment at the specified level,
+        e.g. Nitrobacter-association-Nitrosomonas.
+
+        :param level: Taxonomic level to identify a pair.
+        :param mode: if 'weight', specifies that associations should have identical weights.
+        :return: List containing results of Neo4j transaction
+        """
+        pairs = None
         try:
             with self._driver.session() as session:
                 pairs = session.read_transaction(self._pair_list, level, mode)
-                return pairs
         except Exception:
             logger.error("Could not obtain list of matching associations. \n", exc_info=True)
+        return pairs
 
     def get_unassigned_pairlist(self, level, mode):
-        """Starts a new transaction for every pair list request."""
+        """
+        Starts a new transaction for every pair list request.
+        This function gets pairs that have missing taxonomic assignments at the specified level.
+
+        :param level: Taxonomic level to identify a pair.
+        :param mode: if 'weight', specifies that associations should have identical weights.
+        :return: List containing results of Neo4j transaction
+        """
         try:
             with self._driver.session() as session:
                 pairs = session.read_transaction(self._unassigned_pairlist, level, mode)
@@ -119,19 +157,18 @@ class MetaDriver(object):
             logger.error("Could not obtain list of matching associations. \n", exc_info=True)
 
     def agglomerate_pair(self, pair, level, mode):
-        """For one pair, as returned by get_pairlist,
+        """
+        For one pair, as returned by get_pairlist,
         this function creates new agglomerated nodes,
         deletes old agglomerated nodes, and chains taxonomic nodes
         to the new agglomerated nodes. Morever, the two old associations
         are deleted and replaced by a new association.
 
-        Note: this function needs to be fixed to deal with
-        unasiggned taxonomy. For example, if 20 Rhodobacter species
-        interact with an unassigned bacterial OTU, all 20 will
-        be retained in the final network.
-        Moreover, after agglomerating associations,
-        agglomerated taxa should be agglomerated with taxa
-        that share their taxonomic level so a large component is recreated. """
+        :param pair: List containing transaction results of query for pair
+        :param level: Taxonomic level to identify a pair.
+        :param mode: if 'weight', specifies that associations should have identical weights.
+        :return:
+        """
         try:
             with self._driver.session() as session:
                 agglom_1 = session.write_transaction(self._create_agglom)
@@ -149,8 +186,9 @@ class MetaDriver(object):
         except Exception:
             logger.error("Could not agglomerate a pair of matching associations. \n", exc_info=True)
 
-    def associate_samples(self, label, null_input=None):
-        """Sample identities themselves are not that informative,
+    def associate_samples(self, type, null_input=None):
+        """
+        Sample identities themselves are not that informative,
         but the properties associated with them are.
         To test the hypothesis that taxa are associated with specific sample properties,
         the following tests are performed:
@@ -158,10 +196,15 @@ class MetaDriver(object):
         how many associations do we expect by chance?
         2. For quantitative variables, Spearman correlation is performed.
         Because this is a hypothesis-generating tool,
-        multiple-testing correction should be applied with care."""
+        multiple-testing correction should be applied with care.
+
+        :param type: Type of property (e.g. pH) to query.
+        :param null_input: If missing values are not specified as NA, specify the NA input here.
+        :return:
+        """
         with self._driver.session() as session:
             type_nodes = session.read_transaction(self._query, "MATCH (n:Property) WHERE n.type = '" +
-                                                  label + "' RETURN n.name")
+                                                  type + "' RETURN n.name")
         properties = list(set().union(*(d.values() for d in type_nodes)))
         try:
             with self._driver.session() as session:
@@ -178,7 +221,15 @@ class MetaDriver(object):
             logger.error("Could not associate sample variables to taxa. \n", exc_info=True)
 
     def associate_taxon(self, taxon, mode, null_input, properties):
-        """Tests whether specific sample properties can be associated to a taxon."""
+        """
+        Tests whether specific sample properties can be associated to a taxon.
+
+        :param taxon: Name of a taxon.
+        :param mode: Can be 'Taxon' or 'Agglom_Taxon', specifies which label of taxonomic node.
+        :param null_input: If missing values are not specified as NA, specify the NA input here.
+        :param properties: List specifying types of properties to query.
+        :return:
+        """
         try:
             conts = list()
             categs = list()
@@ -226,30 +277,51 @@ class MetaDriver(object):
             logger.error("Could not associate a specific taxon to sample variables. \n", exc_info=True)
 
     def get_taxlist(self, level):
-        """Starts a new transaction for every tax list request."""
+        """
+        Starts a new transaction for every tax list request.
+        A tax list is a list containing two associations linked to identical taxa.
+
+        :param level: Taxonomic level.
+        :return: List of transaction outcomes
+        """
+        pairs = None
         try:
             with self._driver.session() as session:
                 pairs = session.read_transaction(self._tax_list, level)
-                return pairs
         except Exception:
             logger.error("Could not obtain list of matching taxa. \n", exc_info=True)
+        return pairs
 
     def get_unassigned_taxlist(self, level):
-        """Starts a new transaction for every tax list request."""
+        """
+        Starts a new transaction for every tax list request.
+        This tax list contains associations with nodes that do not have
+        an assignment at the specified level.
+
+        :param level: Taxonomic level.
+        :return: List of transaction outcomes
+        """
+        pairs = None
         try:
             with self._driver.session() as session:
                 pairs = session.read_transaction(self._unassigned_tax_list, level)
-                return pairs
         except Exception:
             logger.error("Could not obtain list of matching taxa. \n", exc_info=True)
+        return pairs
 
     def agglomerate_taxa(self, pair, level):
-        """For one pair, as returned by get_taxlist,
+        """
+        For one pair, as returned by get_taxlist,
         this function merges nodes with similar taxonomy
         but different associations together.
         Old nodes are linked to the new agglomerated node,
         except for Agglom_Taxon; in that case,
-        links to the ancestral nodes are generated.  """
+        links to the ancestral nodes are generated.
+
+        :param pair: Pair as returned by the pair list functions
+        :param level: Taxonomic level
+        :return:
+        """
         try:
             with self._driver.session() as session:
                 agglom_1 = session.write_transaction(self._create_agglom)
@@ -260,19 +332,63 @@ class MetaDriver(object):
         except Exception:
             logger.error("Could not agglomerate a pair of matching associations. \n", exc_info=True)
 
+    def export_fasta(self, fp, name):
+        """
+        This function exports a FASTA file compatible with other tools,
+        e.g. PICRUSt2.
+        The advantage of using this FASTA file is that it
+        only contains taxa present in the database.
+        Hence, tools like PICRUSt2 will run much faster.
+
+        While massoc cannot directly run PICRUSt2, the below command
+        is an example of how you could generate a PICRUSt2 table to provide to massoc.
+        You don't need to run the full PICRUSt2 pipeline because
+        massoc will not use the predicted function abundances.
+
+        For the cheese demo, you could run PICRUSt2 as follows:
+        place seqs.py -s cheese.fasta -o cheese.tre -p 1
+
+
+        :param fp: Output filepath for storing intermediate files.
+        :param name: List of names for files in database.
+        :return:
+        """
+        # first run the system_call_check place_seqs_cmd
+        # many of the commands are default
+        # we can extract a fasta of sequences from the database
+        with self._driver.session() as session:
+            study_fasta = session.read_transaction(self._get_fasta)
+        file = open(fp + "//" + ''.join(name) + ".fasta", "w")
+        file.write(study_fasta)
+        file.close()
+        # use default reference files
+
+
     @staticmethod
     def _query(tx, query):
-        """Processes custom queries."""
+        """
+        Processes custom queries.
+
+        :param tx: Neo4j transaction
+        :param query: String specifying Cypher query
+        :return:
+        """
         results = tx.run(query).data()
         return results
 
-
     @staticmethod
     def _pair_list(tx, level, mode):
-        """Returns a list of association pairs, where the
+        """
+        Returns a list of association pairs, where the
         taxonomic levels at both ends match, and the name of
         the associations are different. If 'weight' is specified as mode,
-        only associations with identical weight are returned."""
+        only associations with identical weight are returned.
+
+        :param tx: Neo4j transaction
+        :param level: Taxonomic level
+        :param mode: if 'weight', searches for associations with matching weights
+        :return: List of transaction outputs
+        """
         if mode == 'weight':
             result = tx.run(("MATCH p=(e:" +
                              level + ")<--()<--(a:Association)-->()-->(g:" +
@@ -298,8 +414,14 @@ class MetaDriver(object):
 
     @staticmethod
     def _tax_list(tx, level):
-        """Returns a list of taxon pairs, where the
-        taxonomic levels match. """
+        """
+        Returns a list of taxon pairs, where the
+        taxonomic levels match.
+
+        :param tx: Neo4j transaction
+        :param level: Taxonomic level
+        :return: List of transaction outcomes
+        """
         result = tx.run(("MATCH p=(e:" +
                          level + ")--(m)--(:Association) MATCH r=(h:" + level +
                          ")<--(n)--(:Association) WHERE (m.name <> n.name) "
@@ -308,8 +430,14 @@ class MetaDriver(object):
 
     @staticmethod
     def _unassigned_tax_list(tx, level):
-        """Returns a list of taxon pairs, where the
-        taxonomic levels are lacking for both taxa. """
+        """
+        Returns a list of taxon pairs, where the
+        taxonomic levels are lacking for both taxa.
+
+        :param tx: Neo4j transaction
+        :param level: Taxonomic level
+        :return: List of transaction outcomes
+        """
         levels = ['Species', 'Genus', 'Family', 'Order', 'Class', 'Phylum', 'Kingdom']
         current = levels.index(level)
         out = list()
@@ -328,11 +456,18 @@ class MetaDriver(object):
 
     @staticmethod
     def _unassigned_pairlist(tx, level, mode):
-        """Returns a list of association pairs, where one node
+        """
+        Returns a list of association pairs, where one node
         has not been assigned the specified taxonomic level.
         Once these results are returned, the pair is checked for
         matching taxonomy at higher taxonomic levels;
-        if they match there, the pair is returned. """
+        if they match there, the pair is returned.
+
+        :param tx: Neo4j transaction
+        :param level: Taxonomic level
+        :param mode: if 'weight', searches for associations with matching weights
+        :return: List of transaction outcomes
+        """
         levels = ['Species', 'Genus', 'Family', 'Order', 'Class', 'Phylum', 'Kingdom']
         current = levels.index(level)
         out = list()
@@ -393,11 +528,13 @@ class MetaDriver(object):
         return out
 
     @staticmethod
-    def _find_upper_matches(tx):
-        """Finds matches at higher taxonomic levels than the specified one. """
-    @staticmethod
     def _create_agglom(tx):
-        """Creates an Agglom_Taxon node and returns its id."""
+        """
+        Creates an Agglom_Taxon node and returns its id.
+
+        :param tx: Neo4j transaction
+        :return: UID of new node
+        """
         uid = str(uuid4())
         # non alphanumeric chars break networkx
         tx.run("CREATE (a:Agglom_Taxon) SET a.name = $id", id=uid)
@@ -405,9 +542,17 @@ class MetaDriver(object):
 
     @staticmethod
     def _chainlinks(tx, node, source1, source2):
-        """Each Agglom_Taxon node is linked to the Taxon node
-        it originated from. If it was generated from an Agglom_Taxon node,
-        that source node's relationships to Taxon nodes are copied to the new node."""
+        """
+        Each Agglom_Taxon node is linked to the Taxon node
+        it originated from. Uses the UID length to check whether the old node
+        was also an agglom_taxon node.
+
+        :param tx: Neo4j transaction
+        :param node: UID of agglom_taxon
+        :param source1: Source node of agglom_taxon as value in pairlist dictionary
+        :param source2: Source node of agglom_taxon as value in pairlist dictionary
+        :return:
+        """
         names = [source1.get('name'), source2.get('name')]
         for name in names:
             if len(name) == 36:
@@ -432,9 +577,17 @@ class MetaDriver(object):
 
     @staticmethod
     def _rewire_associations(tx, node, source1, source2):
-        """Each Agglom_Taxon node is linked to the Taxon node
+        """
+        Each Agglom_Taxon node is linked to the Taxon node
         it originated from. If it was generated from an Agglom_Taxon node,
-        that source node's relationships to Taxon nodes are copied to the new node."""
+        that source node's relationships to Taxon nodes are copied to the new node.
+
+        :param tx: Neo4j transaction
+        :param node: UID of agglom_taxon
+        :param source1: Source node of agglom_taxon as value in pairlist dictionary
+        :param source2: Source node of agglom_taxon as value in pairlist dictionary
+        :return:
+        """
         old1 = tx.run(("MATCH p=(a)--(:Association) WHERE a.name = '" +
                                     source1.nodes[1].get('name') + "' RETURN p")).data()
         old2 = tx.run(("MATCH p=(a)--(:Association) WHERE a.name = '" +
@@ -531,10 +684,18 @@ class MetaDriver(object):
 
 
     @staticmethod
-    def _taxonomy(tx, node, tax, source, level):
-        """Adds appropriate taxonomic relationships to taxonomic nodes.
+    def _taxonomy(tx, node, tax, level):
+        """
+        Adds appropriate taxonomic relationships to taxonomic nodes.
         Generally, if this function returns an error because the 'tree' query
-        came up empty, this means the phylogenetic tree was discontinous."""
+        came up empty, this means the phylogenetic tree was discontinous.
+
+        :param tx: Neo4j transaction
+        :param node: Taxon name
+        :param tax: Dictionary of taxonomic assignments
+        :param level: Level to which taxonomy should be specified
+        :return:
+        """
         tax_list = ['Species', 'Genus', 'Family', 'Order', 'Class', 'Phylum', 'Kingdom']
         rel_list = ['IS_SPECIES', 'IS_GENUS', 'IS_FAMILY', 'IS_ORDER', 'IS_CLASS', 'IS_PHYLUM', 'IS_KINGDOM']
         level_id = tax_list.index(level)
@@ -566,8 +727,18 @@ class MetaDriver(object):
 
     @staticmethod
     def _create_association(tx, agglom_1, agglom_2, networks, weight, mode):
-        """Creates new associations between agglomerated nodes, with
-        the appropriate weight and Network node connections."""
+        """
+        Creates new associations between agglomerated nodes, with
+        the appropriate weight and Network node connections.
+
+        :param tx: Neo4j transaction
+        :param agglom_1: Source agglom_taxon UID
+        :param agglom_2: Source agglom_taxon UID
+        :param networks: Networks containing pair_list associations
+        :param weight: weight of node
+        :param mode: if 'weight', generates weighted association
+        :return:
+        """
         uid = str(uuid4())
         # non alphanumeric chars break networkx
         if mode is 'weight':
@@ -589,8 +760,14 @@ class MetaDriver(object):
 
     @staticmethod
     def _get_network(tx, nodes):
-        """When a new association is generated to replace two old ones,
-        all Network nodes those were connected to are returned by this function."""
+        """
+        When a new association is generated to replace two old ones,
+        all Network nodes those were connected to are returned by this function.
+
+        :param tx: Neo4j transaction
+        :param nodes: List of association names
+        :return: List of network names
+        """
         networks = list()
         for node in nodes:
             all_networks = tx.run("MATCH (:Association {name: '" + node.get('name') +
@@ -602,20 +779,38 @@ class MetaDriver(object):
 
     @staticmethod
     def _get_weight(tx, nodes):
-        """Returns the weight of an Association node."""
+        """
+        Returns the weight of an Association node.
+
+        :param tx: Neo4j transaction
+        :param nodes: List of association names
+        :return: List of association weights
+        """
         weight = tx.run("MATCH (n:Association {name: '" + nodes[0].get('name') +
                         "'}) RETURN n").data()[0]['n'].get('weight')
         return weight
 
     @staticmethod
     def _delete_old_associations(tx, associations):
-        """Deletes specific associations and their relationships."""
+        """
+        Deletes specific associations and their relationships.
+
+        :param tx: Neo4j transaction
+        :param associations: List of association names
+        :return:
+        """
         for node in associations:
             tx.run(("MATCH (n {name: '" + node.get('name') + "'}) DETACH DELETE n"))
 
     @staticmethod
     def _delete_old_agglomerations(tx, nodes):
-        """Deletes old Agglom_Taxon nodes and their relationships."""
+        """
+        Deletes old Agglom_Taxon nodes.
+
+        :param tx: Neo4j transaction
+        :param nodes: List of association names
+        :return:
+        """
         for node in nodes:
             result = tx.run(("MATCH (n:Agglom_Taxon {name: '" + node.get('name') + "'}) RETURN n")).data()
             if len(result) > 0:
@@ -629,6 +824,12 @@ class MetaDriver(object):
         the number of samples in the database that is linked to a success,
         and the same values for the number of samples linked to the taxon.
         Only presence / absence is tested for, not differential abundance.
+
+        :param tx: Neo4j transaction
+        :param taxon: Taxon name
+        :param categ: List containing metadata node type and categorical value representing success
+        :param mode: Carries out hypergeometric test on 'Taxon' or 'Agglom_Taxon'
+        :return: List of population values necessary for hypergeometric test
         """
         type_val = categ[0]
         success = categ[1]
@@ -673,6 +874,12 @@ class MetaDriver(object):
     def _spearman_test(tx, taxon, type_val, mode):
         """
         Returns p-value of Spearman correlation.
+
+        :param tx: Neo4j transaction
+        :param taxon: Taxon name
+        :param type_val: Metadata node type
+        :param mode: Carries out correlation on 'Taxon' or 'Agglom_Taxon'
+        :return: Spearman correlation and p-value
         """
         # get vector of sample values
         sample_values = list()
@@ -721,7 +928,15 @@ class MetaDriver(object):
 
     @staticmethod
     def _shortcut_categorical(tx, taxon, categ, mode, prob):
-        """Creates relationship between categorical variable and taxon."""
+        """
+        Creates relationship between categorical variable and taxon.
+        :param tx: Neo4j transaction
+        :param taxon: Taxon name
+        :param categ: List containing metadata node type and categorical value representing success
+        :param mode: Carries out hypergeometric test on 'Taxon' or 'Agglom_Taxon'
+        :param prob: Outcome of hypergeometric test
+        :return:
+        """
         hit = tx.run(("MATCH (a:Property {type: 'hypergeom_" + categ[0] +
                       "', name: '" + str(prob) + "'}) RETURN a")).data()
         if len(hit) == 0:
@@ -736,38 +951,60 @@ class MetaDriver(object):
                 "RETURN type(r)"))
 
     @staticmethod
-    def _shortcut_continuous(tx, taxon, cont_var, mode):
-        """Creates relationship between categorical variable and taxon."""
-        var_id = list(cont_var.keys())[0]
+    def _shortcut_continuous(tx, taxon, type_val, mode):
+        """
+        Creates relationship between categorical variable and taxon.
+
+        :param tx: Neo4j transaction
+        :param taxon: Taxon name
+        :param type_val: Metadata node type
+        :param mode: Carries out correlation on 'Taxon' or 'Agglom_Taxon'
+        :return:
+        """
+        var_id = list(type_val.keys())[0]
         # first check if property already exists
         hit = tx.run(("MATCH (a:Property {type: 'spearman_" + var_id +
-                      "', name: '" + str(cont_var[var_id]) + "'}) RETURN a")).data()
+                      "', name: '" + str(type_val[var_id]) + "'}) RETURN a")).data()
         if len(hit) == 0:
             tx.run(("CREATE (a:Property {type: 'spearman_" + var_id +
-                    "', name: '" + str(cont_var[var_id]) + "'}) RETURN a"))
+                    "', name: '" + str(type_val[var_id]) + "'}) RETURN a"))
         tx.run(("MATCH (a:" + mode +
                 "),(b:Property) "
                 "WHERE a.name = '" + taxon +
                 "' AND b.type = 'spearman_" + var_id +
-                "' AND b.name = '" + str(cont_var[var_id]) +
+                "' AND b.name = '" + str(type_val[var_id]) +
                 "' CREATE (a)-[r:SPEARMAN]->(b) "
                 "RETURN type(r)"))
 
 
 def _get_unique(node_list, key, mode=None):
-    """Returns number or names of unique nodes in a list."""
+    """
+    Returns number or names of unique nodes in a list.
+
+    :param node_list: List of dictionaries returned by Neo4j transactions.
+    :param key: Key accessing specific node in dictionary.
+    :param mode: If 'num', the number of unique nodes is returned.
+    :return: Unique nodes (list of nodes) or node number
+    """
     unique_samples = list()
-    for item in node_list:
-        unique_samples.append(item[key].get('name'))
-    unique_samples = set(unique_samples)
-    if mode == 'num':
-        unique_samples = len(unique_samples)
+    if node_list:
+        # it is possible that nodes do not yet exist
+        for item in node_list:
+            unique_samples.append(item[key].get('name'))
+        unique_samples = set(unique_samples)
+        if mode == 'num':
+            unique_samples = len(unique_samples)
     return unique_samples
 
 
 def _create_logger(filepath):
-    """ After a filepath has become available, loggers can be created
-    when required to report on errors. """
+    """
+    After a filepath has become available, loggers can be created
+    when required to report on errors.
+
+    :param filepath: Filepath where logs will be written.
+    :return:
+    """
     logpath = filepath + '/massoc.log'
     # filelog path is one folder above massoc
     # pyinstaller creates a temporary folder, so log would be deleted

@@ -140,7 +140,8 @@ class TestBatch(unittest.TestCase):
                   'sample_data': None,
                   'split': 'BODY_SITE',
                   'tax_table': ['tax_bananas.txt'],
-                  'name': ['test']}
+                  'name': ['test'],
+                  'fp': (os.path.dirname(massoc.__file__)[:-6] + 'tests')}
         batch = Batch(deepcopy(testbiom), inputs)
         batch.split_biom()
         self.assertEqual(len(batch.otu), 3)
@@ -158,7 +159,8 @@ class TestBatch(unittest.TestCase):
                   'split': 'Rocket Science',
                   'tax_table': ['tax_bananas.txt'],
                   'prev': 40,
-                  'name': ['test']}
+                  'name': ['test'],
+                  'fp': (os.path.dirname(massoc.__file__)[:-6] + 'tests')}
         batch = Batch(deepcopy(testbiom), inputs)
         batch.prev_filter()
         self.assertEqual(batch.otu['test'].shape[0], 4)
@@ -192,7 +194,8 @@ class TestBatch(unittest.TestCase):
                   'sample_data': None,
                   'split': 'Rocket Science',
                   'tax_table': ['tax_bananas.txt'],
-                  'name': ['test']}
+                  'name': ['test'],
+                  'fp': os.path.dirname(massoc.__file__)[:-7].replace('\\', '/')}
         batch = Batch(testbiom, inputs)
         clrbatch = batch.normalize_transform(mode="clr")
         self.assertFalse(batch.otu['test'] == clrbatch.otu['test'])
@@ -210,7 +213,8 @@ class TestBatch(unittest.TestCase):
                   'sample_data': None,
                   'split': 'TRUE',
                   'tax_table': ['tax_bananas.txt'],
-                  'name': ['test']}
+                  'name': ['test'],
+                  'fp': (os.path.dirname(massoc.__file__)[:-6] + 'tests')}
         np.random.seed(8888)
         batch = Batch(deepcopy(testbiom), inputs)
         batch.cluster_biom()
@@ -229,7 +233,8 @@ class TestBatch(unittest.TestCase):
                   'sample_data': None,
                   'split': 'TRUE',
                   'tax_table': ['tax_bananas.txt'],
-                  'name': ['test']}
+                  'name': ['test'],
+                  'fp': (os.path.dirname(massoc.__file__)[:-6] + 'tests')}
         batch = Batch(deepcopy(testbiom), inputs)
         np.random.seed(8888)
         batch.cluster_biom()
@@ -248,7 +253,8 @@ class TestBatch(unittest.TestCase):
                   'sample_data': None,
                   'split': None,
                   'tax_table': ['tax_bananas.txt'],
-                  'name': ['test']}
+                  'name': ['test'],
+                  'fp': (os.path.dirname(massoc.__file__)[:-6] + 'tests')}
         batch = Batch(deepcopy(testbiom), inputs)
         batch.cluster_biom()
         self.assertEqual(batch.otu['test']._data[1, 1], testbiom['otu']['test']._data[1, 1])
@@ -267,7 +273,8 @@ class TestBatch(unittest.TestCase):
                   'split': None,
                   'tax_table': ['tax_bananas.txt'],
                   'rar': 'True',
-                  'name': ['test']}
+                  'name': ['test'],
+                  'fp': (os.path.dirname(massoc.__file__)[:-6] + 'tests')}
         batch = Batch(deepcopy(testbiom), inputs)
         rawsums = batch.otu['test'].sum(axis='sample')
         batch.rarefy()
@@ -289,7 +296,8 @@ class TestBatch(unittest.TestCase):
                   'rar': ['True'],
                   'min': 3,
                   'prev': None,
-                  'name': ['test']}
+                  'name': ['test'],
+                  'fp': (os.path.dirname(massoc.__file__)[:-6] + 'tests')}
         batch = Batch(deepcopy(testbiom), inputs)
         rawsums = batch.otu['test'].sum(axis='observation')
         batch.prev_filter(mode='min')
@@ -308,7 +316,8 @@ class TestBatch(unittest.TestCase):
                   'split': 'Rocket Science',
                   'tax_table': ['tax_bananas.txt'],
                   'prev': 40,
-                  'name': ['test']}
+                  'name': ['test'],
+                  'fp': (os.path.dirname(massoc.__file__)[:-6] + 'tests')}
         batch = Batch(deepcopy(testbiom), inputs)
         rawtable = batch.otu['test'].matrix_data
         batch.prev_filter(mode='prev')
@@ -331,7 +340,8 @@ class TestBatch(unittest.TestCase):
                   'split': None,
                   'tax_table': ['tax_bananas.txt'],
                   'rar': 3,
-                  'name': ['test']}
+                  'name': ['test'],
+                  'fp': (os.path.dirname(massoc.__file__)[:-6] + 'tests')}
         batch = Batch(deepcopy(testbiom), inputs)
         batch.rarefy()
         newsums = batch.otu['test'].sum(axis='sample')

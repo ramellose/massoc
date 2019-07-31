@@ -95,6 +95,14 @@ class Batch(object):
     """
 
     def __init__(self, counts=None, inputs=None):
+        """
+        Initializes the Batch object.
+
+        :param counts: Dictionary of dictionary of BIOM files.
+        The first-level dictionary has taxonomic levels as keys, the second names.
+        :param inputs: Dictionary of inputs.
+        :return:
+        """
         self.otu = {}
         self.species = {}
         self.genus = {}
@@ -126,6 +134,8 @@ class Batch(object):
         The collapse_tax function allows users to generate BIOM files
         containing agglomerated data. This means network analysis can be
         performed simultaneously on genus, order and other taxonomic levels.
+
+        :return:
         """
         try:
             if 'species' in self.inputs['levels']:
@@ -157,6 +167,8 @@ class Batch(object):
         filenames follow a standard format. This function retrieves such filenames
         so BIOM files can be read without requiring them to be stated explicitly
         by the user.
+
+        :return:
         """
         try:
             filenames = dict()
@@ -177,6 +189,9 @@ class Batch(object):
         in a Batch object to HDF5 files.
         OTU files are always written to disk,
         the rest only if required.
+
+        :param fmt: Format for writing; 'hdf5' or 'json'.
+        :return:
         """
         for x in self.inputs['name']:
             filename = self.inputs['fp'] + '/' + x + '_otu.hdf5'
@@ -210,6 +225,9 @@ class Batch(object):
         a clr transform on all OTU tables in a Batch object.
         It returns a deep copy of the original Batch object,
         so the original file is not modified.
+
+        :param mode: transformation mode; clr (centered log-ratio) or ilr (isometric log-ratio)
+        :return: Transformed copy of Batch object.
         """
         batchcopy = copy.deepcopy(self)
         try:
@@ -234,68 +252,79 @@ class Batch(object):
 
     def prev_filter(self, mode='prev'):
         """
-        Filters all OTUs in a Batch.otu dictionary for prevalence.
-        prev should be a value between 0 and 1, and is the
-        minimum fraction of non-zero values required per OTU.
-        After OTUs are filtered for prevalence,
-        higher taxonomic levels are updated to reflect this.
-        """
-        for x in list(self.otu):
-            data = self.otu[x].matrix_data
-            data = csr_matrix.todense(data)
-            keep_otus = list()
-            binotu = None
-            try:
-                if mode == 'prev':  # calculates prevalence
-                    fracs = np.count_nonzero(data, axis=1)
-                    nsamples = data.shape[1]
-                    fracs = fracs / nsamples
-                    for y in range(0, len(fracs)):
-                        if fracs[y] >= (float(self.inputs['prev'])/100):
-                            keep_otus.append(self.otu[x]._observation_ids[y])
-                        else:
-                            binotu = self.otu[x]._observation_ids[y]
-                    if binotu is not None and 'Bin' not in keep_otus:
-                        keep_otus.append(binotu)
-            except Exception:
-                logger.error("Could not set prevalence filter", exc_info=True)
-            try:
-                if mode == 'min':
-                    mincount = np.sum(data, axis=1)
-                    for y in range(0, len(mincount)):
-                        if mincount[y] >= (int(self.inputs['min'])):
-                            keep_otus.append(self.otu[x]._observation_ids[y])
-                        else:
-                            binotu = self.otu[x]._observation_ids[y]
-                    if binotu is not None:
-                        keep_otus.append(binotu)
-            except Exception:
-                logger.error("Could not set a minimum count filter", exc_info=True)
-            keep = self.otu[x].filter(keep_otus, axis="observation", inplace=False)
-            try:
-                if binotu is not None:
-                    bin = self.otu[x].filter(keep_otus[:-1], axis="observation", inplace=False, invert=True)
-                    binsums = np.sum(bin.matrix_data, axis=0) # sums all binned OTUs
-                    # need to recreate keep._data as lil matrix, is more efficient
-                    orig = keep._data.tolil(copy=True)
-                    if 'Bin' not in keep_otus:
-                        bin_id = keep._obs_index[binotu]
-                        orig[bin_id] = binsums
-                        keep._observation_ids[bin_id] = "Bin"
-                        keep._obs_index["Bin"] = keep._obs_index.pop(binotu)
-                    if 'Bin' in keep_otus:  # necessary to prevent duplicate Bin ID
-                        old_bin_id = keep._obs_index["Bin"]
-                        old_bin_sums = keep._data[old_bin_id]
-                        new_bin_sums = binsums + old_bin_sums
-                        orig[old_bin_id] = new_bin_sums
-                    # update keep._data with orig
-                    keep._data = orig.tocsr()
-            except Exception:
-                logger.error("Could not preserve binned taxa", exc_info=True)
-            self.otu[x] = keep
-        if len(self.genus) > 0:
-            self.collapse_tax()
+        Some operations may require transformed data.
+        This function performs normalization and
+        a clr transform on all OTU tables in a Batch object.
+        It returns a deep copy of the original Batch object,
+        so the original file is not modified.
 
+        :param mode: prev or min, specifies whether taxa should be filtered
+        based on prevalence or minimum abundance. The values are stored in the batch.inputs dictionary.
+        :return:
+        """
+        all_bioms = {'otu': self.otu, 'genus': self.genus,
+                     'family': self.family, 'order': self.order,
+                     'class': self.class_, 'phylum': self.phylum}
+        for level in all_bioms:
+            for name in all_bioms[level]:
+                data = all_bioms[level][name].matrix_data
+                data = csr_matrix.todense(data)
+                keep_otus = list()
+                binotu = None
+                try:
+                    if mode == 'prev':  # calculates prevalence
+                        fracs = np.count_nonzero(data, axis=1)
+                        nsamples = data.shape[1]
+                        fracs = fracs / nsamples
+                        for y in range(0, len(fracs)):
+                            if fracs[y] >= (float(self.inputs['prev'])/100):
+                                keep_otus.append(all_bioms[level][name]._observation_ids[y])
+                            else:
+                                binotu = all_bioms[level][name]._observation_ids[y]
+                        if binotu is not None and 'Bin' not in keep_otus:
+                            keep_otus.append(binotu)
+                except Exception:
+                    logger.error("Could not set prevalence filter", exc_info=True)
+                try:
+                    if mode == 'min':
+                        mincount = np.sum(data, axis=1)
+                        for y in range(0, len(mincount)):
+                            if mincount[y] >= (int(self.inputs['min'])):
+                                keep_otus.append(all_bioms[level][name]._observation_ids[y])
+                            else:
+                                binotu = all_bioms[level][name]._observation_ids[y]
+                        if binotu is not None:
+                            keep_otus.append(binotu)
+                except Exception:
+                    logger.error("Could not set a minimum count filter", exc_info=True)
+                keep = all_bioms[level][name].filter(keep_otus, axis="observation", inplace=False)
+                try:
+                    if binotu is not None:
+                        bin = all_bioms[level][name].filter(keep_otus[:-1], axis="observation", inplace=False, invert=True)
+                        binsums = np.sum(bin.matrix_data, axis=0) # sums all binned OTUs
+                        # need to recreate keep._data as lil matrix, is more efficient
+                        orig = keep._data.tolil(copy=True)
+                        if 'Bin' not in keep_otus:
+                            bin_id = keep._obs_index[binotu]
+                            orig[bin_id] = binsums
+                            keep._observation_ids[bin_id] = "Bin"
+                            keep._obs_index["Bin"] = keep._obs_index.pop(binotu)
+                        if 'Bin' in keep_otus:  # necessary to prevent duplicate Bin ID
+                            old_bin_id = keep._obs_index["Bin"]
+                            old_bin_sums = keep._data[old_bin_id]
+                            new_bin_sums = binsums + old_bin_sums
+                            orig[old_bin_id] = new_bin_sums
+                        # update keep._data with orig
+                        keep._data = orig.tocsr()
+                except Exception:
+                    logger.error("Could not preserve binned taxa", exc_info=True)
+                all_bioms[level][name] = keep
+        self.otu = all_bioms['otu']
+        self.genus = all_bioms['genus']
+        self.family = all_bioms['family']
+        self.order = all_bioms['order']
+        self.class_ = all_bioms['class']
+        self.phylum = all_bioms['phylum']
 
     def rarefy(self):
         """
@@ -303,34 +332,48 @@ class Batch(object):
         A mininum read depth can be specified;
         samples with reads lower than this read depth are removed,
         and then samples are rarefied to equal depth.
-        """
-        batchcopy = deepcopy(self)
-        for x in list(self.otu):
-            try:
-                if self.inputs['rar'] == 'True':
-                    lowest_count = int(min(self.otu[x].sum(axis='sample')))
-                else:
-                    lowest_count = int(self.inputs['rar'])
-                data = self.otu[x].matrix_data
-                data = csr_matrix.todense(data)
-                keep_samples = list()
-                mincount = np.sum(data, axis=0)
-                for y in range(mincount.shape[1]):
-                    if mincount.item(y) >= lowest_count:
-                        keep_samples.append(self.otu[x]._sample_ids[y])
-                keep = self.otu[x].filter(keep_samples, axis="sample", inplace=False)
-                batchcopy.otu[x] = keep.subsample(n=lowest_count, axis='sample')
-            except Exception:
-                logger.error("Unable to rarefy file", exc_info=True)
-            for x in list(self.otu):
-                self.otu[x] = batchcopy.otu[x]
 
-    def split_biom(self, mode="sample", *args):
+        :return:
+        """
+        all_bioms = {'otu': self.otu, 'genus': self.genus,
+                     'family': self.family, 'order': self.order,
+                     'class': self.class_, 'phylum': self.phylum}
+        batchcopy = deepcopy(all_bioms)
+        for level in all_bioms:
+            for name in all_bioms[level]:
+                try:
+                    if self.inputs['rar'] == 'True':
+                        lowest_count = int(min(all_bioms[level][name].sum(axis='sample')))
+                    else:
+                        lowest_count = int(self.inputs['rar'])
+                    data = all_bioms[level][name].matrix_data
+                    data = csr_matrix.todense(data)
+                    keep_samples = list()
+                    mincount = np.sum(data, axis=0)
+                    for y in range(mincount.shape[1]):
+                        if mincount.item(y) >= lowest_count:
+                            keep_samples.append(all_bioms[level][name]._sample_ids[y])
+                    keep = all_bioms[level][name].filter(keep_samples, axis="sample", inplace=False)
+                    batchcopy[level][name] = keep.subsample(n=lowest_count, axis='sample')
+                except Exception:
+                    logger.error("Unable to rarefy file", exc_info=True)
+                for name in list(all_bioms[level]):
+                    all_bioms[level][name] = batchcopy[level][name]
+        self.otu = all_bioms['otu']
+        self.genus = all_bioms['genus']
+        self.family = all_bioms['family']
+        self.order = all_bioms['order']
+        self.class_ = all_bioms['class']
+        self.phylum = all_bioms['phylum']
+
+    def split_biom(self):
         """
         Splits bioms into several subfiles according to
         sample metadata variable. Source: biom-format.org.
         The original file is preserved, so returned files
         include the split- and non-split files.
+
+        :return:
         """
         inputs = self.inputs
         part_f = lambda id_, md: md[inputs['split']]
@@ -354,7 +397,8 @@ class Batch(object):
         self.otu = new_dict
 
     def cluster_biom(self):
-        """First normalizes bioms so clustering is not affected,
+        """
+        First normalizes bioms so clustering is not affected,
         performs transformation and then applies clustering.
         Note that the returned biom files are not normalized,
         this is just for the clustering process.
@@ -364,6 +408,8 @@ class Batch(object):
         Clustering adds metadata info to the samples.
         Splitting according to cluster ID is done
         by wrapping the split_biom function.
+
+        :return:
         """
         inputs = self.inputs
         if inputs['nclust'] is not None:
@@ -439,12 +485,19 @@ class Batch(object):
 
 
 def _data_bin(biomfile, taxnum, key):
-    """While the BIOM file collapse function collapses counts, it stores taxonomy in a manner
+    """
+    While the BIOM file collapse function collapses counts, it stores taxonomy in a manner
     that is not compatible with the OTU taxonomy; taxonomy is stored as observation ID and not as
     observation metadata.
     Here, new observation IDs are generated for agglomerated data that are a combination
     of the old IDs. Moreover, the taxonomy of the agglomerated data is concatenated to
-    the agglomeration level and added to the observation metadata. """
+    the agglomeration level and added to the observation metadata.
+
+    :param biomfile: BIOM file according to the biom-format standards.
+    :param taxnum: Number indicating taxonomic level (e.g. 6 for Genus).
+    :param key: Value used for naming agglomerated taxa.
+    :return: Taxonomically collapsed BIOM file.
+    """
     collapse_f = lambda id_, md: '; '.join(md['taxonomy'][:taxnum])
     collapsed = biomfile.collapse(collapse_f, norm = False, min_group_size = 1,
                                   axis='observation', include_collapsed_metadata=True)
@@ -456,18 +509,25 @@ def _data_bin(biomfile, taxnum, key):
         keep_tax = biomfile._observation_metadata[keep_obs]['taxonomy'][:taxnum]  # removes tax up to agglom
         id['taxonomy'] = keep_tax
     new_obs_ids = deepcopy(obs_ids)
+    new_obs_index = deepcopy(collapsed._obs_index)
     for number in range(len(obs_ids)):
         id = obs_ids[number]
         num_id = collapsed._obs_index[id]
         old_ids = agglom_ids[num_id]
-        new_obs_ids[number] = key + "-agglom-" + str(number)
+        new_id = key + "-agglom-" + str(number)
+        new_obs_ids[number] = new_id
+        # need to update index as well
+        new_obs_index[new_id] = new_obs_index.pop(id)
     collapsed._observation_ids = new_obs_ids
+    collapsed._obs_index = new_obs_index
     return collapsed
 
 
 def write_settings(settings, path=None):
     """
     Writes a dictionary of settings to a json file.
+
+    :param settings: Dictionary of settings (i.e. 'inputs' in above functions).
     :param settings: Filepath to settings file.
     :return:
     """
@@ -483,6 +543,7 @@ def write_settings(settings, path=None):
 def read_settings(path):
     """
     Writes a dictionary of settings to a json file.
+
     :param path: Filepath to settings file.
     :return: Dictionary of settings
     """
@@ -497,6 +558,7 @@ def read_bioms(counts):
     """
     Given a dictionary of filenames per taxonomic level,
     this function generates a dictionary of biom files.
+
     :param counts: Dictionary of filenames leading to BIOM files
     :return: Dictionary of BIOM files
     """
@@ -508,8 +570,13 @@ def read_bioms(counts):
 
 
 def _create_logger(filepath):
-    """ After a filepath has become available, loggers can be created
-    when required to report on errors. """
+    """
+    After a filepath has become available, loggers can be created
+    when required to report on errors.
+
+    :param filepath: Path where logger files are stored.
+    :return:
+    """
     logpath = filepath + '/massoc.log'
     # filelog path is one folder above massoc
     # pyinstaller creates a temporary folder, so log would be deleted
