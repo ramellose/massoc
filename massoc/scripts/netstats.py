@@ -15,6 +15,7 @@ from neo4j.v1 import GraphDatabase
 import sys
 import logging.handlers
 from itertools import combinations
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -92,11 +93,14 @@ class NetDriver(object):
         try:
             with self._driver.session() as session:
                 union = session.read_transaction(self._get_union, networks)
+                logger.info("The union set operation for networks " + str(networks) +
+                            "has been added to "
+                            "the database\nwith name " + union + ". ")
         except Exception:
             logger.error("Could not obtain graph union. ", exc_info=True)
         return union
 
-    def graph_intersection(self, networks=None, weight=True):
+    def graph_intersection(self, networks=None, weight=True, n=None):
         """
         Returns a subgraph that contains all nodes present in both specified networks.
         If no networks are specified, the function returns only nodes that are
@@ -104,12 +108,16 @@ class NetDriver(object):
 
         :param networks: List of network names
         :param weight: If false, the intersection includes associations with matching partners but different weights
+        :param n: If specified, number of networks that the intersecting node should be in
         :return: Edge list of lists containing source, target, network and weight of each edge.
         """
         intersection = None
         try:
             with self._driver.session() as session:
-                intersection = session.read_transaction(self._get_intersection, networks, weight=weight)
+                intersection = session.read_transaction(self._get_intersection, networks, weight=weight, n=n)
+            logger.info("The intersection set operation for networks " + str(networks) +
+                        "has been added to "
+                        "the database\nwith name " + intersection + ". ")
         except Exception:
             logger.error("Could not obtain graph intersection. ", exc_info=True)
         return intersection
@@ -127,6 +135,9 @@ class NetDriver(object):
         try:
             with self._driver.session() as session:
                 difference = session.read_transaction(self._get_difference, networks, weight=weight)
+                logger.info("The difference set operation for networks " + str(networks) +
+                            "has been added to "
+                            "the database \nwith name " + difference + ". ")
         except Exception:
             logger.error("Could not obtain graph difference. ", exc_info=True)
         return difference
@@ -169,7 +180,8 @@ class NetDriver(object):
                          " as names MATCH (n:Association)-->(b:Network) "
                          "WHERE b.name in names RETURN n")).data()
         assocs = _get_unique(assocs, 'n')
-        _write_logic(tx, operation='Union', networks=networks, assocs=assocs)
+        setname = _write_logic(tx, operation='Union', networks=networks, assocs=assocs)
+        return setname
 
     @staticmethod
     def _get_intersection(tx, networks, weight, n):
@@ -182,25 +194,25 @@ class NetDriver(object):
         :param n: If specified, number of networks that the intersecting node should be in
         :return: Edge list of lists containing source, target, network and weight of each edge.
         """
-        queries = list()
         if not n:
+            queries = list()
             for node in networks:
                 queries.append(("MATCH (n:Association)-->(:Network {name: '" +
                                 node + "'}) "))
             query = " ".join(queries) + "RETURN n"
             assocs = tx.run(query).data()
-            assocs = list(_get_unique(assocs, 'n'))
         else:
             assocs = list()
             combos = combinations(networks, n)
             for combo in combos:
+                queries = list()
                 for node in combo:
                     queries.append(("MATCH (n:Association)-->(:Network {name: '" +
                                     node + "'}) "))
                 query = " ".join(queries) + "RETURN n"
                 combo_assocs = tx.run(query).data()
-                combo_assocs = list(_get_unique(combo_assocs, 'n'))
-                assocs.append(combo_assocs)
+                assocs.extend(combo_assocs)
+        assocs = list(_get_unique(assocs, 'n'))
         if weight:
             query = ("MATCH (a)-[:WITH_TAXON]-(n:Association)-[:WITH_TAXON]-(b) "
                      "MATCH (a)-[:WITH_TAXON]-(m:Association)-[:WITH_TAXON]-(b) "
@@ -220,15 +232,21 @@ class NetDriver(object):
                                "'})-->(n:Network) RETURN n")).data()
                 nets = _get_unique(nets, 'n')
                 in_networks.extend(nets)
-                if all(x in in_networks for x in networks):
-                    filter_weighted.append(assoc)
+                if n:
+                    if len(in_networks) > n:
+                        filter_weighted.append(assoc)
+                else:
+                    if all(x in in_networks for x in networks):
+                        filter_weighted.append(assoc)
             assocs.extend(_get_unique(filter_weighted, 'n'))
             assocs.extend(_get_unique(filter_weighted, 'm'))
+        name = 'Intersection'
         if weight:
-            name = 'Intersection_weight'
-        else:
-            name = 'Intersection'
-        _write_logic(tx, operation=name, networks=networks, assocs=assocs)
+            name += '_weight'
+        if n:
+            name = name + '_' + str(n)
+        setname = _write_logic(tx, operation=name, networks=networks, assocs=assocs)
+        return setname
 
     @staticmethod
     def _get_difference(tx, networks, weight):
@@ -257,11 +275,11 @@ class NetDriver(object):
                 if len(check) == 0:
                     cleaned.append(assoc)
             assocs = cleaned
+        name = 'Difference'
         if weight:
-            name = 'Difference_weight'
-        else:
-            name = 'Difference'
-        _write_logic(tx, operation=name, networks=networks, assocs=assocs)
+            name += '_weight'
+        setname = _write_logic(tx, operation=name, networks=networks, assocs=assocs)
+        return setname
 
 
 def _write_logic(tx, operation, networks, assocs):
@@ -274,15 +292,19 @@ def _write_logic(tx, operation, networks, assocs):
     :param assocs: List of associations returned by logic operation
     :return:
     """
-    name = operation + '_' + '_'.join(networks)
-    tx.run("CREATE (n:Set {name: $id}) "
-           "RETURN n", id=name)
+    id = str(uuid4())
+    # Necessary to add uuid chars or otherwise repeated logic operations
+    # create multiple links to each matching set node
+    name = operation + '_' + id[0:8]
+    tx.run("CREATE (n:Set {name: $id, networks: $networks}) "
+           "RETURN n", id=name, networks=str(networks))
     for assoc in assocs:
         tx.run(("MATCH (a:Association), (b:Set) WHERE a.name = '" +
                 assoc +
                 "' AND b.name = '" + name +
                 "' CREATE (a)-[r:IN_SET]->(b) "
                 "RETURN type(r)"))
+    return name
 
 
 def _get_unique(node_list, key, mode=None):

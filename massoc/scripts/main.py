@@ -159,6 +159,8 @@ def get_input(inputs, publish=False):
         biomfile._observation_ids = new_ids
         biomfile._obs_index = new_indexes
         bioms.otu[name] = biomfile
+    logger.info('Collapsing taxonomy... ')
+    bioms.collapse_tax()
     if inputs['cluster'] is not None:
         if publish:
             pub.sendMessage('update', msg='Clustering BIOM files...')
@@ -166,8 +168,6 @@ def get_input(inputs, publish=False):
         bioms.cluster_biom()
     if inputs['split'] is not None and inputs['split'] is not 'TRUE':
         bioms.split_biom()
-    logger.info('Collapsing taxonomy... ')
-    bioms.collapse_tax()
     if inputs['min'] is not None:
         if publish:
             pub.sendMessage('update', msg='Setting minimum mean abundance...')
@@ -451,6 +451,7 @@ def run_netstats(inputs, publish=False):
         importdriver = ImportDriver(user=inputs['username'],
                                     password=inputs['password'],
                                     uri=inputs['address'], filepath=inputs['fp'])
+
     except Exception:
         logger.warning("Failed to start database worker.  ", exc_info=True)
     try:

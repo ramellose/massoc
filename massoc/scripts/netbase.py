@@ -235,19 +235,19 @@ class ImportDriver(object):
             if not networks:
                 with self._driver.session() as session:
                     networks = session.read_transaction(self._query,
-                                                          "MATCH (n:Network) RETURN n")
+                                                        "MATCH (n:Network) RETURN n")
                     networks.extend(session.read_transaction(self._query,
-                                                          "MATCH (n:Set) RETURN n"))
+                                                             "MATCH (n:Set) RETURN n"))
                 networks = list(_get_unique(networks, key='n'))
             # create 1 network per database
             for network in networks:
                 g = nx.MultiGraph()
                 with self._driver.session() as session:
                     edge_list = session.read_transaction(self._association_list, network)
-                for i in range(len(edge_list[0])):
-                    index_1 = edge_list[0][i]
-                    index_2 = edge_list[1][i]
-                    g.add_edge(index_1, index_2, source=str(edge_list[2][i]), weight=str(edge_list[3][i]))
+                for edge in edge_list[0]:
+                    index_1 = edge[0]
+                    index_2 = edge[1]
+                    g.add_edge(index_1, index_2, source=str(edge_list[0][edge]), weight=str(edge_list[1][edge]))
                 # necessary for networkx indexing
                 for item in tax_dict:
                     nx.set_node_attributes(g, tax_dict[item], item)
@@ -714,10 +714,8 @@ class ImportDriver(object):
         """
         associations = tx.run(("MATCH (n:Association)--(b {name: '" + network +
                                "'}) RETURN n")).data()
-        sources = list()
-        targets = list()
-        networks = list()
-        weights = list()
+        networks = dict()
+        weights = dict()
         for assoc in associations:
             taxa = tx.run(("MATCH (m)--(:Association {name: '" + assoc['n'].get('name') +
                            "'})--(n) "
@@ -726,8 +724,7 @@ class ImportDriver(object):
             if len(taxa) == 0:
                 pass  # apparently this can happen. Need to figure out why!!
             else:
-                source = taxa[0]['m'].get('name')
-                target = taxa[0]['n'].get('name')
+                edge = (taxa[0]['m'].get('name'), taxa[0]['n'].get('name'))
                 network = tx.run(("MATCH (:Association {name: '" + assoc['n'].get('name') +
                                   "'})-->(n:Network) RETURN n"))
                 network = _get_unique(network, key='n')
@@ -736,36 +733,20 @@ class ImportDriver(object):
                     network_list.append(item)
                 weight = [assoc['n'].get('weight')]
                 # it is possible for sets to contain associations with different weights
-                if source in sources:
-                    for hit in np.where(source in sources)[0]:
-                        if targets[hit] == target:
-                            network_list.extend(networks[hit])
-                            networks[hit] = set(network_list)
-                            weight.extend(weights[hit])
-                            weights[hit] = set(weight)
-                        else:
-                            sources.append(source)
-                            targets.append(target)
-                            networks.append(network_list)
-                            weights.append(weight)
-                elif source in targets:
-                    for hit in np.where(source in targets)[0]:
-                        if sources[hit] == target:
-                            network_list.extend(networks[hit])
-                            networks[hit] = set(network_list)
-                            weight.extend(weights[hit])
-                            weights[hit] = set(weight)
-                        else:
-                            sources.append(source)
-                            targets.append(target)
-                            networks.append(network_list)
-                            weights.append(weight)
+                if edge in networks.keys():
+                    network_list.extend(networks[edge])
+                    networks[edge] = set(network_list)
+                    weight.extend(weights[edge])
+                    weights[edge] = set(weight)
+                elif (edge[1], edge[0]) in networks.keys():
+                    network_list.extend(networks[(edge[1], edge[0])])
+                    networks[(edge[1], edge[0])] = set(network_list)
+                    weight.extend(weights[(edge[1], edge[0])])
+                    weights[(edge[1], edge[0])] = set(weight)
                 else:
-                    sources.append(source)
-                    targets.append(target)
-                    networks.append(network_list)
-                    weights.append(weight)
-        edge_list = [sources, targets, networks, weights]
+                    networks[edge] = network_list
+                    weights[edge] = weight
+        edge_list = (networks, weights)
         return edge_list
 
     @staticmethod
