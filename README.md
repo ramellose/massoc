@@ -108,7 +108,7 @@ After downloading and extracting the Neo4j Server folder, initialize the server 
 
 ### Tutorials
 
-Check out the demo at https://github.com/ramellose/massoc/raw/master/massoc/docs/massoc_demo.pdf
+Check out the demos and manual at https://github.com/ramellose/massoc/tree/master/docs
 
 ## Development version and command line
 
