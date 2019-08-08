@@ -250,8 +250,9 @@ class ImportDriver(object):
                     if len(edge_list[1][edge]) == 1:
                         weight = float(edge_list[1][edge][0])
                     else:
-                        weight = str(edge_list[1][edge])
-                    g.add_edge(index_1, index_2, source=str(edge_list[0][edge]), weight=weight)
+                        weight = float(np.mean(edge_list[1][edge]))
+                    g.add_edge(index_1, index_2, source=str(edge_list[0][edge]),
+                               weight=weight, all_weights=str(edge_list[1][edge]))
                 # necessary for networkx indexing
                 for item in tax_dict:
                     nx.set_node_attributes(g, tax_dict[item], item)
