@@ -1,6 +1,8 @@
 # massoc
 
-A platform for inference and analysis of microbial association networks. V0.1.0.
+A platform for inference and analysis of microbial association networks.
+This platform provides tools optimized for noisy networks and includes all the functionality you need to start using Neo4j for your biological data.
+Native graph storage is the natural match for linked biological data!
 
 Currently, the following features are available:
 * Preprocessing of count files for network inference
@@ -16,8 +18,9 @@ This is version 0.3.0, and therefore still in early alpha. Encountering bugs is 
 
 ## Getting Started
 
-You can access <i>massoc</i> through a CLI and a GUI.
-Detailed documentation of these interfaces, combined with a  manual describing all inputs, will be available soon.
+You can access <i>massoc</i> through a command line interface (CLI) and through a graphical interface (GUI).
+For tutorials with these two interfaces and a complete manual, check out the [docs](https://github.com/ramellose/massoc/tree/master/docs).
+The tutorials show you how to use the entire <i>massoc</i> pipeline, from BIOM file to network analysis!
 
 ## Installation
 
@@ -104,11 +107,6 @@ For macOS, first install the appropriate Java version:
 brew cask install java8
 ```
 After downloading and extracting the Neo4j Server folder, initialize the server with <b>bin\neo4j console</b>.
-
-
-### Tutorials
-
-Check out the demos and manual at https://github.com/ramellose/massoc/tree/master/docs
 
 ## Development version and command line
 
