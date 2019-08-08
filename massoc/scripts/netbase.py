@@ -247,7 +247,11 @@ class ImportDriver(object):
                 for edge in edge_list[0]:
                     index_1 = edge[0]
                     index_2 = edge[1]
-                    g.add_edge(index_1, index_2, source=str(edge_list[0][edge]), weight=str(edge_list[1][edge]))
+                    if len(edge_list[1][edge]) == 1:
+                        weight = float(edge_list[1][edge][0])
+                    else:
+                        weight = str(edge_list[1][edge])
+                    g.add_edge(index_1, index_2, source=str(edge_list[0][edge]), weight=weight)
                 # necessary for networkx indexing
                 for item in tax_dict:
                     nx.set_node_attributes(g, tax_dict[item], item)
