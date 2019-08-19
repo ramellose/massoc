@@ -117,7 +117,7 @@ def get_input(inputs, publish=False):
                 try:
                     sample_metadata_fp = inputs['sample_data'][j]
                     observation_metadata_fp = inputs['tax_table'][j]
-                except KeyError:
+                except TypeError or KeyError:
                     pass
                 if sample_metadata_fp is not None:
                     sample_f = open(sample_metadata_fp, 'r')
@@ -138,7 +138,7 @@ def get_input(inputs, publish=False):
                             obs_data[b].pop(l, None)
                         obs_data[b]['taxonomy'] = tax
                     biomtab.add_metadata(obs_data, axis='observation')
-                filestore[inputs['name'][i]] = biomtab
+                filestore[inputs['name'][j]] = biomtab
                 j += 1
         except Exception:
             logger.warning("Failed to combine input files.", exc_info=True)
