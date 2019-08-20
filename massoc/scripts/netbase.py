@@ -726,7 +726,8 @@ class ImportDriver(object):
         for assoc in associations:
             taxa = tx.run(("MATCH (m)--(:Association {name: '" + assoc['n'].get('name') +
                            "'})--(n) "
-                           "WHERE (m:Taxon OR m:Agglom_Taxon) AND (n:Taxon OR n:Agglom_Taxon)"
+                           "WHERE (m:Taxon OR m:Agglom_Taxon) AND (n:Taxon OR n:Agglom_Taxon) "
+                           "AND m.name <> n.name "
                            "RETURN m, n LIMIT 1")).data()
             if len(taxa) == 0:
                 pass  # apparently this can happen. Need to figure out why!!
