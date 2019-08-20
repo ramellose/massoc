@@ -386,50 +386,52 @@ class ImportDriver(object):
         if len(hit) == 0:
             tx.run("CREATE (a:Taxon) SET a.name = $id", id=taxon)
             tax_index = biomfile.index(axis='observation', id=taxon)
-            tax_dict = biomfile.metadata(axis='observation')[tax_index]['taxonomy']
-            tax_levels = ['Kingdom', 'Phylum', 'Class',
-                          'Order', 'Family', 'Genus', 'Species']
-            # rel_list = ['IS_KINGDOM', 'IS_PHYLUM', 'IS_CLASS',
-            #             'IS_ORDER', 'IS_FAMILY', 'IS_GENUS', 'IS_SPECIES']
-            # tree_list = ['PART_OF_KINGDOM', 'PART_OF_PHYLUM', 'PART_OF_CLASS',
-            #             'PART_OF_ORDER', 'PART_OF_FAMILY', 'PART_OF_GENUS']
-            if str(taxon) is not 'Bin':
-                # define range for which taxonomy needs to be added
-                j = 0
-                if tax_dict:
-                    for i in range(len(tax_dict)):
-                        level = tax_dict[i]
-                        if sum(c.isalpha() for c in level) > 1:
-                            # only consider adding as node if there is more
-                            # than 1 character in the taxonomy
-                            # first request ID to see if the taxonomy node already exists
-                            j += 1
-                    for i in range(0, j):
-                        if tax_dict[i] != 'NA':  # maybe allow user input to specify missing values
-                            hit = tx.run(("MATCH (a:" + tax_levels[i] +
-                                          " {name: '" + tax_dict[i] +
-                                          "'}) RETURN a")).data()
-                            if len(hit) == 0:
-                                tx.run(("CREATE (a:" + tax_levels[i] +
-                                        " {name: '" + tax_dict[i] +
-                                        "', type: 'Taxonomy'}) RETURN a")).data()
-                                if i > 0:
-                                    tx.run(("MATCH (a:" + tax_levels[i] +
-                                            "), (b:" + tax_levels[i-1] +
-                                            ") WHERE a.name = '" + tax_dict[i] +
-                                            "' AND b.name = '" + tax_dict[i-1] +
-                                            "' CREATE (a)-[r: PART_OF]->(b) "
-                                            "RETURN type(r)"))
-                            hit = tx.run(("MATCH (a:Taxon)-[r]-(b:" + tax_levels[i] +
-                                    ") WHERE a.name = '" + taxon +
-                                    "' AND b.name = '" + tax_dict[i] +
-                                    "' RETURN type(r)")).data()
-                            if len(hit) == 0:
-                                tx.run(("MATCH (a:Taxon), (b:" + tax_levels[i] +
+            if biomfile.metadata(axis='observation')[tax_index]:
+                # it is possible that there is no metadata
+                tax_dict = biomfile.metadata(axis='observation')[tax_index]['taxonomy']
+                tax_levels = ['Kingdom', 'Phylum', 'Class',
+                              'Order', 'Family', 'Genus', 'Species']
+                # rel_list = ['IS_KINGDOM', 'IS_PHYLUM', 'IS_CLASS',
+                #             'IS_ORDER', 'IS_FAMILY', 'IS_GENUS', 'IS_SPECIES']
+                # tree_list = ['PART_OF_KINGDOM', 'PART_OF_PHYLUM', 'PART_OF_CLASS',
+                #             'PART_OF_ORDER', 'PART_OF_FAMILY', 'PART_OF_GENUS']
+                if str(taxon) is not 'Bin':
+                    # define range for which taxonomy needs to be added
+                    j = 0
+                    if tax_dict:
+                        for i in range(len(tax_dict)):
+                            level = tax_dict[i]
+                            if sum(c.isalpha() for c in level) > 1:
+                                # only consider adding as node if there is more
+                                # than 1 character in the taxonomy
+                                # first request ID to see if the taxonomy node already exists
+                                j += 1
+                        for i in range(0, j):
+                            if tax_dict[i] != 'NA':  # maybe allow user input to specify missing values
+                                hit = tx.run(("MATCH (a:" + tax_levels[i] +
+                                              " {name: '" + tax_dict[i] +
+                                              "'}) RETURN a")).data()
+                                if len(hit) == 0:
+                                    tx.run(("CREATE (a:" + tax_levels[i] +
+                                            " {name: '" + tax_dict[i] +
+                                            "', type: 'Taxonomy'}) RETURN a")).data()
+                                    if i > 0:
+                                        tx.run(("MATCH (a:" + tax_levels[i] +
+                                                "), (b:" + tax_levels[i-1] +
+                                                ") WHERE a.name = '" + tax_dict[i] +
+                                                "' AND b.name = '" + tax_dict[i-1] +
+                                                "' CREATE (a)-[r: PART_OF]->(b) "
+                                                "RETURN type(r)"))
+                                hit = tx.run(("MATCH (a:Taxon)-[r]-(b:" + tax_levels[i] +
                                         ") WHERE a.name = '" + taxon +
                                         "' AND b.name = '" + tax_dict[i] +
-                                        "' CREATE (a)-[r: BELONGS_TO]->(b) "
-                                        "RETURN type(r)"))
+                                        "' RETURN type(r)")).data()
+                                if len(hit) == 0:
+                                    tx.run(("MATCH (a:Taxon), (b:" + tax_levels[i] +
+                                            ") WHERE a.name = '" + taxon +
+                                            "' AND b.name = '" + tax_dict[i] +
+                                            "' CREATE (a)-[r: BELONGS_TO]->(b) "
+                                            "RETURN type(r)"))
             else:
                 tx.run("CREATE (a:Taxon) SET a.name = $id", id='Bin')
 
