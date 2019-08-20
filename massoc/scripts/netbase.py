@@ -386,7 +386,7 @@ class ImportDriver(object):
         if len(hit) == 0:
             tx.run("CREATE (a:Taxon) SET a.name = $id", id=taxon)
             tax_index = biomfile.index(axis='observation', id=taxon)
-            if biomfile.metadata(axis='observation')[tax_index]:
+            if biomfile.metadata(axis='observation'):
                 # it is possible that there is no metadata
                 tax_dict = biomfile.metadata(axis='observation')[tax_index]['taxonomy']
                 tax_levels = ['Kingdom', 'Phylum', 'Class',
