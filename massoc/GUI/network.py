@@ -49,7 +49,7 @@ class NetworkPanel(wx.Panel):
         self.spar_pval = None
         self.cores = 4
         self.conet = None
-        self.conet_bash = None
+        self.conet_bash = os.path.dirname(massoc.__file__) + '\\data\\CoNet.sh'
         self.spar = None
 
         # while mainframe contains the main settings file, the NetworkPanel also needs it to generate a command call

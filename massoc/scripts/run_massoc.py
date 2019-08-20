@@ -201,12 +201,12 @@ networkparser.add_argument('-spiec_settings', '--SPIEC-EASI_settings',
                            dest='spiec',
                            required=False,
                            help='Location of SPIEC-EASI Rscript file. ',
-                           default=None)
+                           default=os.path.dirname(massoc.__file__) + '\\data\\spieceasi.R')
 networkparser.add_argument('-conet_bash', '--CoNet_bashscript',
                            dest='conet_bash',
                            required=False,
                            help='Location of CoNet bash file. ',
-                           default=None)
+                           default=os.path.dirname(massoc.__file__) + '\\data\\CoNet.sh')
 networkparser.add_argument('-spar', '--SparCC_executable',
                            dest='spar',
                            required=False,

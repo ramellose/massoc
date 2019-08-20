@@ -1,0 +1,3 @@
+include data/CoNet.sh
+include data/spieceasi.R
+include data/demo.biom

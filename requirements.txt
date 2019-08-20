@@ -10,3 +10,4 @@ scikit-bio
 biom-format
 wxPython
 psutil
+pbr>=5.0.0
