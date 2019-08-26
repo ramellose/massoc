@@ -26,13 +26,6 @@ import logging.handlers
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# handler to sys.stdout
-sh = logging.StreamHandler(sys.stdout)
-sh.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-sh.setFormatter(formatter)
-logger.addHandler(sh)
-
 
 class NetworkPanel(wx.Panel):
     def __init__(self, parent):
