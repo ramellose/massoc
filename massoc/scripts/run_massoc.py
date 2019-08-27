@@ -329,9 +329,10 @@ netstatsparser.add_argument('-net', '--networks',
 netstatsparser.add_argument('-n', '--num',
                             dest='num',
                             required=False,
+                            nargs='+',
                             default=None,
-                            help='Carry out set operations on a subset of networks in the database.'
-                                 '\n Make sure supplied names match the network node labels.')
+                            help='If specified, the intersection is taken over a number of networks \n'
+                                 'rather than all networks. Multiple numbers can be provided.')
 netstatsparser.add_argument('-fp', '--output_filepath',
                             dest='fp',
                             help='Filepath for saving output files and reading settings.',

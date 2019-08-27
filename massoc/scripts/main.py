@@ -391,8 +391,8 @@ def run_neo4j(inputs, publish=False):
         try:
             # pub.sendMessage('update', msg='Uploading network files...')
             logger.info('Uploading network files...  ')
-            for item in inputs['network']:
-                network = nx.read_weighted_edgelist(item)
+            for item in bioms.networks:
+                network = bioms.networks[item]
                 # try to split filename to make a nicer network id
                 subnames = item.split('/')
                 if len(subnames) == 1:
@@ -458,8 +458,9 @@ def run_netstats(inputs, publish=False):
             if 'union' in inputs['logic']:
                 netdriver.graph_union(networks=networks)
             if 'intersection' in inputs['logic']:
-                netdriver.graph_intersection(networks=networks,
-                                             weight=inputs['weight'], n=inputs['num'])
+                for n in inputs['num']:
+                    netdriver.graph_intersection(networks=networks,
+                                                 weight=inputs['weight'], n=float(n))
             if 'difference' in inputs['logic']:
                 netdriver.graph_difference(networks=networks,
                                            weight=inputs['weight'])
@@ -709,6 +710,12 @@ def _read_network(filepath):
             logger.warning('Format not accepted. '
                            'Please specify the filename including extension (e.g. test.graphml).', exc_info=True)
             exit()
+        try:
+            if 'name' in network.nodes[list(network.nodes)[0]]:
+                if network.nodes[list(network.nodes)[0]]['name'] != list(network.nodes)[0]:
+                    network = nx.relabel_nodes(network, nx.get_node_attributes(network, 'name'))
+        except IndexError:
+            logger.warning('One of the imported networks contains no nodes.', exc_info=True)
     except Exception:
         logger.error('Could not import network file!', exc_info=True)
     return network

@@ -156,19 +156,19 @@ class Nets(Batch):
         except TypeError:
             logger.error("Unable to read edge list. ", exc_info=True)
         taxon_ids = list()
-        biomfiles = [self.otu, self.species, self.genus,
-                     self.family, self.order, self.class_, self.phylum]
-        biomlist = list()
-        for subset in biomfiles:
-            for file in subset:
-                biomlist.append(subset[file])
-        for biomfile in biomlist:
-            taxon_ids.extend(list(biomfile.ids(axis='observation')))
-        missing_node = any(x not in taxon_ids for x in network_nodes)
-        if missing_node:
-            logger.error("Imported network node not found in taxon identifiers. ", exc_info=True)
-        else:
-            self.networks[name] = network
+        if len(self.otu) > 0:
+            biomfiles = [self.otu, self.species, self.genus,
+                         self.family, self.order, self.class_, self.phylum]
+            biomlist = list()
+            for subset in biomfiles:
+                for file in subset:
+                    biomlist.append(subset[file])
+            for biomfile in biomlist:
+                taxon_ids.extend(list(biomfile.ids(axis='observation')))
+            missing_node = any(x not in taxon_ids for x in network_nodes)
+            if missing_node:
+                logger.error("Imported network node not found in taxon identifiers. ", exc_info=True)
+        self.networks[name] = network
 
     def _prepare_conet(self):
         """
