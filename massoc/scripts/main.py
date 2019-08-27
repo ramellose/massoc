@@ -86,12 +86,13 @@ def get_input(inputs, publish=False):
             logger.error("Add a metadata table for every OTU table!", exc_info=True)
             raise ValueError("Add a metadata table for every OTU table!")
     filestore = {}
-    if inputs['biom_file'] is None:
-        if inputs['otu_table'] is None:
-            logger.error("Please supply either a biom file "
-                         "or a tab-delimited OTU table!", exc_info=True)
-            raise ValueError("Please supply either a biom file "
-                             "or a tab-delimited OTU table!")
+    if inputs['biom_file'] is None and inputs['network'] is None:
+        if inputs['otu_table'] is None and inputs['network'] is None:
+            logger.error("Please supply either a biom file"
+                         ", a tab-delimited OTU table or a network!", exc_info=True)
+            raise ValueError("Please supply either a biom file"
+                             ", a tab-delimited OTU table or a network!")
+    # Only process count files if present
     i = 0
     if inputs['name'] is None:
         inputs['name'] = list()
@@ -145,67 +146,69 @@ def get_input(inputs, publish=False):
     bioms = Batch({'otu': filestore}, inputs)
     # it is possible that there are forbidden characters in the OTU identifiers
     # we can forbid people from using those, or replace those with an underscore
-    for name in bioms.otu:
-        biomfile = bioms.otu[name]
-        taxon_ids = biomfile._observation_ids  # need to be careful with these operations
-        taxon_index = biomfile._obs_index      # likely to corrupt BIOM file if done wrong
-        new_ids = deepcopy(taxon_ids)
-        new_indexes = deepcopy(taxon_index)
-        for i in range(0, len(taxon_ids)):
-            id = taxon_ids[i]
-            new_id = id.replace(" ", "_")
-            new_ids[i] = new_id
-            new_indexes[new_id] = new_indexes.pop(id)
-        biomfile._observation_ids = new_ids
-        biomfile._obs_index = new_indexes
-        bioms.otu[name] = biomfile
-    logger.info('Collapsing taxonomy... ')
-    bioms.collapse_tax()
-    if inputs['cluster'] is not None:
-        if publish:
-            pub.sendMessage('update', msg='Clustering BIOM files...')
-        logger.info('Clustering BIOM files... ')
-        bioms.cluster_biom()
-    if inputs['split'] is not None and inputs['split'] is not 'TRUE':
-        bioms.split_biom()
-    if inputs['min'] is not None:
-        if publish:
-            pub.sendMessage('update', msg='Setting minimum mean abundance...')
-        logger.info('Removing taxa below minimum count... ')
-        bioms.prev_filter(mode='min')
-    if inputs['prev'] is not None:
-        if publish:
-            pub.sendMessage('update', msg='Setting prevalence filter...')
-        logger.info('Setting prevalence filter... ')
-        bioms.prev_filter(mode='prev')
-    if inputs['rar'] is not None:
-        if publish:
-            pub.sendMessage('update', msg='Rarefying counts...')
-        logger.info('Rarefying counts... ')
-        bioms.rarefy()
+    if inputs['biom_file'] or inputs['otu_table']:
+        for name in bioms.otu:
+            biomfile = bioms.otu[name]
+            taxon_ids = biomfile._observation_ids  # need to be careful with these operations
+            taxon_index = biomfile._obs_index      # likely to corrupt BIOM file if done wrong
+            new_ids = deepcopy(taxon_ids)
+            new_indexes = deepcopy(taxon_index)
+            for i in range(0, len(taxon_ids)):
+                id = taxon_ids[i]
+                new_id = id.replace(" ", "_")
+                new_ids[i] = new_id
+                new_indexes[new_id] = new_indexes.pop(id)
+            biomfile._observation_ids = new_ids
+            biomfile._obs_index = new_indexes
+            bioms.otu[name] = biomfile
+        logger.info('Collapsing taxonomy... ')
+        bioms.collapse_tax()
+        if inputs['cluster'] is not None:
+            if publish:
+                pub.sendMessage('update', msg='Clustering BIOM files...')
+            logger.info('Clustering BIOM files... ')
+            bioms.cluster_biom()
+        if inputs['split'] is not None and inputs['split'] is not 'TRUE':
+            bioms.split_biom()
+        if inputs['min'] is not None:
+            if publish:
+                pub.sendMessage('update', msg='Setting minimum mean abundance...')
+            logger.info('Removing taxa below minimum count... ')
+            bioms.prev_filter(mode='min')
+        if inputs['prev'] is not None:
+            if publish:
+                pub.sendMessage('update', msg='Setting prevalence filter...')
+            logger.info('Setting prevalence filter... ')
+            bioms.prev_filter(mode='prev')
+        if inputs['rar'] is not None:
+            if publish:
+                pub.sendMessage('update', msg='Rarefying counts...')
+            logger.info('Rarefying counts... ')
+            bioms.rarefy()
     bioms.inputs['procbioms'] = dict()
-    if 'otu' not in bioms.inputs['levels']: # add otu level always
-        bioms.inputs['procbioms']['otu'] = dict()
-        for name in bioms.inputs['name']:
-            biomname = bioms.inputs['fp'] + '/' + name + '_' + 'otu' + '.hdf5'
-            bioms.inputs['procbioms']['otu'][name] = biomname
-    for level in bioms.inputs['levels']:
-        bioms.inputs['procbioms'][level] = dict()
-        for name in bioms.inputs['name']:
-            biomname = bioms.inputs['fp'] + '/' + name + '_' + level + '.hdf5'
-            bioms.inputs['procbioms'][level][name] = biomname
-    all_bioms = {**bioms.otu, **bioms.genus, **bioms.family, **bioms.order,
-                 **bioms.class_, **bioms.phylum}
-    for biomfile in all_bioms:
-        if all_bioms[biomfile].shape[0] == 1:
-            logger.error("The current preprocessing steps resulted in BIOM files with only 1 row.", exc_info=True)
+    if inputs['biom_file'] or inputs['otu_table']:
+        if 'otu' not in bioms.inputs['levels']: # add otu level always
+            bioms.inputs['procbioms']['otu'] = dict()
+            for name in bioms.inputs['name']:
+                biomname = bioms.inputs['fp'] + '/' + name + '_' + 'otu' + '.hdf5'
+                bioms.inputs['procbioms']['otu'][name] = biomname
+        for level in bioms.inputs['levels']:
+            bioms.inputs['procbioms'][level] = dict()
+            for name in bioms.inputs['name']:
+                biomname = bioms.inputs['fp'] + '/' + name + '_' + level + '.hdf5'
+                bioms.inputs['procbioms'][level][name] = biomname
+        all_bioms = {**bioms.otu, **bioms.genus, **bioms.family, **bioms.order,
+                     **bioms.class_, **bioms.phylum}
+        for biomfile in all_bioms:
+            if all_bioms[biomfile].shape[0] == 1:
+                logger.error("The current preprocessing steps resulted in BIOM files with only 1 row.", exc_info=True)
     if inputs['network'] is not None:
         if publish:
             pub.sendMessage('update', msg='Checking previously generated networks...')
         logger.info('Checking previously generated networks...')
         filelist = deepcopy(inputs['network'])
         for file in filelist:
-            network = nx.read_weighted_edgelist(file)
+            network = _read_network(file)
             nodes = len(network.nodes)
             edges = len(network.edges)
             logger.info("This network has " + str(nodes) + \
@@ -215,25 +218,10 @@ def get_input(inputs, publish=False):
                 logger.info('This is a weighted network.')
             else:
                 logger.info('This is an unweighted network.')
-            match = 0
-            taxa = None
-            for biomfile in inputs['biom_file']:
-                try:
-                    biomtab = load_table(biomfile)
-                    taxa = biomtab.ids(axis='observation')
-                except TypeError:
-                    logger.error("Could not access source BIOM file. ", exc_info=True)
-                if len(taxa) > 1:
-                    nodes = list(network.nodes)
-                    if all(elem in taxa for elem in nodes):
-                        match += 1
-                        logger.info('Node identifiers in ' + biomfile + \
-                                       ' matched node identifiers in ' + file + '.')
-            if match == 0:
-                logger.error("No BIOM file matched network nodes!. ", exc_info=True)
     try:
-        bioms.write_bioms()
-        logger.info('BIOM files written to disk.  ')
+        if inputs['biom_file'] or inputs['otu_table']:
+            bioms.write_bioms()
+            logger.info('BIOM files written to disk.  ')
     except Exception:
         logger.warning('Failed to write BIOM files to disk.  ', exc_info=True)
     write_settings(bioms.inputs)
@@ -368,11 +356,14 @@ def run_neo4j(inputs, publish=False):
             existing_pid = True
         if publish:
             pub.sendMessage('update', msg='Uploading files to database...')
-        filestore = read_bioms(inputs['procbioms'])
+        filestore = None
+        if inputs['procbioms']:
+            filestore = read_bioms(inputs['procbioms'])
         # ask users for additional input
         bioms = Batch(filestore, inputs)
         bioms = Nets(bioms)
-        for network in inputs['network']:
+        for file in inputs['network']:
+            network = _read_network(file)
             bioms.add_networks(network)
         importdriver = None
         sleep(12)
@@ -695,3 +686,29 @@ def _create_logger(filepath):
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     fh.setFormatter(formatter)
     logger.addHandler(fh)
+
+
+def _read_network(filepath):
+    """
+    Imports network file according to extension.
+
+    :param filepath: Network filepath
+    :return: NetworkX object
+    """
+    filename = filepath.split(sep=".")
+    extension = filename[len(filename) - 1]
+    network = None
+    try:
+        if extension == 'graphml':
+            network = nx.read_graphml(filepath)
+        elif extension == 'txt':
+            network = nx.read_weighted_edgelist(filepath)
+        elif extension == 'gml':
+            network = nx.read_gml(filepath)
+        else:
+            logger.warning('Format not accepted. '
+                           'Please specify the filename including extension (e.g. test.graphml).', exc_info=True)
+            exit()
+    except Exception:
+        logger.error('Could not import network file!', exc_info=True)
+    return network

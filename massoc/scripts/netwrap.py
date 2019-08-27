@@ -140,17 +140,16 @@ class Nets(Batch):
         except Exception:
             logger.error("Unable to write networks to disk. ", exc_info=True)
 
-    def add_networks(self, filename):
+    def add_networks(self, network):
         """
         In case users want to manually import a network,
         this function adds the network file to the Nets object and checks
         whether the identifiers specified in the file match those in included BIOM files.
         Currently, only edge lists are supported.
 
-        :param filename: Filename with network object.
+        :param network: NetworkX object
         :return:
         """
-        network = nx.read_weighted_edgelist(filename)
         try:
             network_nodes = list(network.nodes)
         except TypeError:

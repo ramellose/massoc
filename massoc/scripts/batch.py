@@ -522,9 +522,12 @@ def read_settings(path):
     :return: Dictionary of settings
     """
     # as requested in comment
-    with open(path, 'r') as file:
-        settings = json.load(file)
-    file.close()
+    try:
+        with open(path, 'r') as file:
+            settings = json.load(file)
+        file.close()
+    except FileNotFoundError:
+        settings = dict()
     return settings
 
 
