@@ -140,7 +140,7 @@ class Nets(Batch):
         except Exception:
             logger.error("Unable to write networks to disk. ", exc_info=True)
 
-    def add_networks(self, network):
+    def add_networks(self, network, name):
         """
         In case users want to manually import a network,
         this function adds the network file to the Nets object and checks
@@ -148,6 +148,7 @@ class Nets(Batch):
         Currently, only edge lists are supported.
 
         :param network: NetworkX object
+        :param name: Network name
         :return:
         """
         try:
@@ -167,7 +168,7 @@ class Nets(Batch):
         if missing_node:
             logger.error("Imported network node not found in taxon identifiers. ", exc_info=True)
         else:
-            self.networks[filename] = network
+            self.networks[name] = network
 
     def _prepare_conet(self):
         """

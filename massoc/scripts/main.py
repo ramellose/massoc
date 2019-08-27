@@ -364,7 +364,7 @@ def run_neo4j(inputs, publish=False):
         bioms = Nets(bioms)
         for file in inputs['network']:
             network = _read_network(file)
-            bioms.add_networks(network)
+            bioms.add_networks(network, file)
         importdriver = None
         sleep(12)
         importdriver = ImportDriver(user=inputs['username'],
