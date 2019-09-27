@@ -22,6 +22,8 @@ import numpy as np
 import logging
 import sys
 import os
+import json
+import requests
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -219,54 +221,71 @@ class ImportDriver(object):
         Writes networks to graphML file.
         If no path is given, the network is returned as a NetworkX object.
         :param path: Filepath where network is written to.
-        :param pairlist: List of associations to write to disk.
         :param networks: Names of networks to write to disk.
         :return:
         """
-        results = dict()
+        results = None
         try:
-            with self._driver.session() as session:
-                tax_dict = session.read_transaction(self._tax_dict)
-            with self._driver.session() as session:
-                tax_properties = session.read_transaction(self._tax_properties)
-            for item in tax_properties:
-                for taxon in tax_properties[item]:
-                    tax_properties[item][taxon] = str(tax_properties[item][taxon])
-            if not networks:
-                with self._driver.session() as session:
-                    networks = session.read_transaction(self._query,
-                                                        "MATCH (n:Network) RETURN n")
-                    networks.extend(session.read_transaction(self._query,
-                                                             "MATCH (n:Set) RETURN n"))
-                networks = list(_get_unique(networks, key='n'))
-            # create 1 network per database
-            for network in networks:
-                g = nx.MultiGraph()
-                with self._driver.session() as session:
-                    edge_list = session.read_transaction(self._association_list, network)
-                for edge in edge_list[0]:
-                    index_1 = edge[0]
-                    index_2 = edge[1]
-                    if len(edge_list[1][edge]) == 1:
-                        weight = float(edge_list[1][edge][0])
-                    else:
-                        weight = float(np.mean(edge_list[1][edge]))
-                    g.add_edge(index_1, index_2, source=str(edge_list[0][edge]),
-                               weight=weight, all_weights=str(edge_list[1][edge]))
-                # necessary for networkx indexing
-                for item in tax_dict:
-                    nx.set_node_attributes(g, tax_dict[item], item)
-                for item in tax_properties:
-                    nx.set_node_attributes(g, tax_properties[item], item)
-                g = g.to_undirected()
-                if path:
+            results = self._return_networks(networks)
+            if path:
+                for network in results:
                     name = path + '/' + network + '.graphml'
-                    nx.write_graphml(g, name)
-                else:
-                    results[network] = g
+                    nx.write_graphml(results[network], name)
         except Exception:
             logger.error("Could not write database graph to GraphML file. \n", exc_info=True)
         return results
+
+    def export_cyto(self, networks=None):
+        """
+        Writes networks to Cytoscape.
+        :param networks: Names of networks to write to disk.
+        :return:
+        """
+        results = self._return_networks(networks)
+        # Basic Setup
+        PORT_NUMBER = 1234
+        BASE = 'http://localhost:' + str(PORT_NUMBER) + '/v1/'
+        HEADERS = {'Content-Type': 'application/json'}
+        for network in results:
+            # Define dictionary from networkx
+            network_dict = {
+                'data':
+                    {"node_default": {}, "edge_default": {}, 'name': network},
+                'elements': {
+                    'nodes': [],
+                    'edges': []
+                }
+            }
+            i = 1
+            id_dict = {}
+            for node in results[network].nodes:
+                id_dict[node] = i
+                data = {'data': {'name': node, 'id': str(i),
+                                 'SUID': int(i), 'selected': False,  'shared_name': node}}
+                for property in results[network].nodes[node]:
+                    data['data'][property] = results[network].nodes[node][property]
+                network_dict['elements']['nodes'].append(data)
+                i += 1
+            i = 1
+            for edge in results[network].edges:
+                data = {'data': {'shared_name': edge[0] + '->' + edge[1],
+                                 'name': edge[0] + '->' + edge[1],
+                                 'source': str(id_dict[edge[0]]), 'target': str(id_dict[edge[1]]),
+                                 'id': str(i), 'SUID': int(i), 'selected': False},
+                        'selected': False}
+                for property in results[network].edges[edge]:
+                    if property == 'source':
+                        # source is source node in Cytoscape
+                        # but network source in Neo4j
+                        data['data']['networks'] = results[network].edges[edge][property]
+                    else:
+                        data['data'][property] = results[network].edges[edge][property]
+                network_dict['elements']['edges'].append(data)
+                i += 1
+            res = requests.post(BASE + 'networks?collection=Neo4jexport', data=json.dumps(network_dict),
+                                headers=HEADERS)
+            new_network_id = res.json()['networkSUID']
+            print('Network created for ' + network + ': SUID = ' + str(new_network_id))
 
     def create_association_relationships(self):
         """
@@ -312,6 +331,51 @@ class ImportDriver(object):
         sequence_dict = {k: {'target': v, 'weight': None} for k, v in sequence_dict.items() if k in seqs_in_database}
         logger.info("Uploading " + str(len(sequence_dict)) + " sequences.")
         self.include_nodes(sequence_dict, name="16S", label="Taxon", check=False)
+
+    def _return_networks(self, networks):
+        """
+        Returns NetworkX networks from the Neo4j database.
+
+        :param networks: Names of networks to return.
+        :return: Dictionary of networks
+        """
+        results = dict()
+        with self._driver.session() as session:
+            tax_dict = session.read_transaction(self._tax_dict)
+        with self._driver.session() as session:
+            tax_properties = session.read_transaction(self._tax_properties)
+        for item in tax_properties:
+            for taxon in tax_properties[item]:
+                tax_properties[item][taxon] = str(tax_properties[item][taxon])
+        if not networks:
+            with self._driver.session() as session:
+                networks = session.read_transaction(self._query,
+                                                    "MATCH (n:Network) RETURN n")
+                networks.extend(session.read_transaction(self._query,
+                                                         "MATCH (n:Set) RETURN n"))
+            networks = list(_get_unique(networks, key='n'))
+        # create 1 network per database
+        for network in networks:
+            g = nx.MultiGraph()
+            with self._driver.session() as session:
+                edge_list = session.read_transaction(self._association_list, network)
+            for edge in edge_list[0]:
+                index_1 = edge[0]
+                index_2 = edge[1]
+                if len(edge_list[1][edge]) == 1:
+                    weight = float(edge_list[1][edge][0])
+                else:
+                    weight = float(np.mean(edge_list[1][edge]))
+                g.add_edge(index_1, index_2, source=str(edge_list[0][edge]),
+                           weight=weight, all_weights=str(edge_list[1][edge]))
+            # necessary for networkx indexing
+            for item in tax_dict:
+                nx.set_node_attributes(g, tax_dict[item], item)
+            for item in tax_properties:
+                nx.set_node_attributes(g, tax_properties[item], item)
+            g = g.to_undirected()
+            results[network] = g
+        return results
 
     @staticmethod
     def _delete_all(tx):
@@ -423,9 +487,9 @@ class ImportDriver(object):
                                                 "' CREATE (a)-[r: PART_OF]->(b) "
                                                 "RETURN type(r)"))
                                 hit = tx.run(("MATCH (a:Taxon)-[r]-(b:" + tax_levels[i] +
-                                        ") WHERE a.name = '" + taxon +
-                                        "' AND b.name = '" + tax_dict[i] +
-                                        "' RETURN type(r)")).data()
+                                              ") WHERE a.name = '" + taxon +
+                                              "' AND b.name = '" + tax_dict[i] +
+                                              "' RETURN type(r)")).data()
                                 if len(hit) == 0:
                                     tx.run(("MATCH (a:Taxon), (b:" + tax_levels[i] +
                                             ") WHERE a.name = '" + taxon +
@@ -622,12 +686,12 @@ class ImportDriver(object):
                               "WHERE a.name = '"+ taxon1 +
                               "' AND b.name = '" + taxon2 +
                               "' RETURN p")).data()
-                if mode == 'weight' and len(hit)>0:
+                if mode == 'weight' and len(hit) > 0:
                     # need to find the association that not only matches taxon, but also weight
                     for node in hit:
                         matched_hit = None
                         database_weight = node['p'].nodes[1].get('weight')
-                        if database_weight == network_weight:
+                        if np.sign(database_weight) == np.sign(network_weight):
                             matched_hit = node
                         else:
                             pass
@@ -636,14 +700,16 @@ class ImportDriver(object):
                         hit.append(matched_hit)
                 # first check if association is already present)
                 if len(hit) > 0:
+                    weights = [network_weight]
                     for association in hit:
                         uid = association['p'].nodes[1].get('name')
                         # first check if there is already a link between the association and network
                         network_hit = tx.run(("MATCH p=(a:Association)--(b:Network) "
-                                "WHERE a.name = '" +
-                                uid +
-                                "' AND b.name = '" + name +
-                                "' RETURN p")).data()
+                                              "WHERE a.name = '" +
+                                              uid +
+                                              "' AND b.name = '" + name +
+                                              "' RETURN p")).data()
+                        weights.append(association['p'].nodes[1].get('weight'))
                         if len(network_hit) == 0:
                             tx.run(("MATCH (a:Association), (b:Network) "
                                     "WHERE a.name = '" +
@@ -651,6 +717,11 @@ class ImportDriver(object):
                                     "' AND b.name = '" + name +
                                     "' CREATE (a)-[r:IN_NETWORK]->(b) "
                                     "RETURN type(r)"))
+                        tx.run(("MATCH p=(a:Association) WHERE a.name = '" +
+                                uid +
+                                "' SET a.weight = " +
+                                str(weights) +
+                                " RETURN p", ))
                 else:
                     uid = str(uuid4())
                     # non alphanumeric chars break networkx
@@ -745,12 +816,12 @@ class ImportDriver(object):
                     network_list.extend(networks[edge])
                     networks[edge] = set(network_list)
                     weight.extend(weights[edge])
-                    weights[edge] = set(weight)
+                    weights[edge] = weight
                 elif (edge[1], edge[0]) in networks.keys():
                     network_list.extend(networks[(edge[1], edge[0])])
                     networks[(edge[1], edge[0])] = set(network_list)
                     weight.extend(weights[(edge[1], edge[0])])
-                    weights[(edge[1], edge[0])] = set(weight)
+                    weights[(edge[1], edge[0])] = weight
                 else:
                     networks[edge] = network_list
                     weights[edge] = weight

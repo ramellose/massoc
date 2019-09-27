@@ -350,6 +350,20 @@ def run_neo4j(inputs, publish=False):
             importdriver.close()
         except Exception:
             logger.warning("Failed to write database to graphml file.  ", exc_info=True)
+    elif inputs['job'] == 'cyto':
+        if not existing_pid:
+            start_database(inputs, publish)
+            existing_pid = True
+        try:
+            if publish:
+                pub.sendMessage('update', msg='Accessing database...')
+            importdriver = ImportDriver(user=inputs['username'],
+                                        password=inputs['password'],
+                                        uri=inputs['address'], filepath=inputs['fp'])
+            importdriver.export_cyto(path=inputs['fp'])
+            importdriver.close()
+        except Exception:
+            logger.warning("Failed to export networks to Cytoscape.  ", exc_info=True)
     else:
         if not existing_pid:
             start_database(inputs, publish)
