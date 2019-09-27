@@ -360,7 +360,7 @@ def run_neo4j(inputs, publish=False):
             importdriver = ImportDriver(user=inputs['username'],
                                         password=inputs['password'],
                                         uri=inputs['address'], filepath=inputs['fp'])
-            importdriver.export_cyto(path=inputs['fp'])
+            importdriver.export_cyto()
             importdriver.close()
         except Exception:
             logger.warning("Failed to export networks to Cytoscape.  ", exc_info=True)

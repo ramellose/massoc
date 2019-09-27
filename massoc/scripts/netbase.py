@@ -363,8 +363,15 @@ class ImportDriver(object):
             for edge in edge_list[0]:
                 index_1 = edge[0]
                 index_2 = edge[1]
-                all_weights = re.findall("[-+]?[.]?[\d]+(?:,\d\d\d)*[\.]?\d*(?:[eE][-+]?\d+)?",
-                                         edge_list[1][edge][0])
+                all_weights = []
+                try:
+                    all_weights = re.findall("[-+]?[.]?[\d]+(?:,\d\d\d)*[\.]?\d*(?:[eE][-+]?\d+)?",
+                                             edge_list[1][edge][0])
+                except TypeError:
+                    if type(all_weights) == list:
+                        all_weights = edge_list[1][edge][0]
+                    else:
+                        all_weights = []
                 all_weights = [float(x) for x in all_weights]
                 weight = float(np.mean(all_weights))
                 g.add_edge(index_1, index_2, source=str(edge_list[0][edge]),
@@ -684,24 +691,9 @@ class ImportDriver(object):
                 if mode == 'weight':
                     network_weight = str(attr['weight'])
                 hit = tx.run(("MATCH p=(a)<--(:Association)-->(b) "
-                              "WHERE a.name = '"+ taxon1 +
+                              "WHERE a.name = '" + taxon1 +
                               "' AND b.name = '" + taxon2 +
                               "' RETURN p")).data()
-                if mode == 'weight' and len(hit) > 0:
-                    # need to find the association that not only matches taxon, but also weight
-                    hit = list()
-                    for node in hit:
-                        matched_hit = None
-                        database_weight = node['p'].nodes[1].get('weight')
-                        database_weight = re.findall("[-+]?[.]?[\d]+(?:,\d\d\d)*[\.]?\d*(?:[eE][-+]?\d+)?",
-                                                 database_weight)
-                        weight_list = [float(x) for x in database_weight]
-                        if np.sign(np.mean(weight_list)) == np.sign(network_weight):
-                            matched_hit = node
-                        else:
-                            pass
-                    if matched_hit:
-                        hit.append(matched_hit)
                 # first check if association is already present)
                 if len(hit) > 0:
                     weights = [network_weight]
@@ -713,7 +705,16 @@ class ImportDriver(object):
                                               uid +
                                               "' AND b.name = '" + name +
                                               "' RETURN p")).data()
-                        weights.append(association['p'].nodes[1].get('weight'))
+                        database_weight = association['p'].nodes[1].get('weight')
+                        try:
+                            database_weight = re.findall("[-+]?[.]?[\d]+(?:,\d\d\d)*[\.]?\d*(?:[eE][-+]?\d+)?",
+                                                         database_weight)
+                        except TypeError:
+                            if type(database_weight) == list:
+                                pass
+                            else:
+                                database_weight = []
+                        weights.extend(database_weight)
                         if len(network_hit) == 0:
                             tx.run(("MATCH (a:Association), (b:Network) "
                                     "WHERE a.name = '" +
@@ -721,11 +722,11 @@ class ImportDriver(object):
                                     "' AND b.name = '" + name +
                                     "' CREATE (a)-[r:IN_NETWORK]->(b) "
                                     "RETURN type(r)"))
-                        tx.run(("MATCH p=(a:Association) WHERE a.name = '" +
+                        tx.run(("MATCH (a:Association) WHERE a.name = '" +
                                 uid +
                                 "' SET a.weight = " +
                                 str(weights) +
-                                " RETURN p", ))
+                                " RETURN a"))
                 else:
                     uid = str(uuid4())
                     # non alphanumeric chars break networkx
