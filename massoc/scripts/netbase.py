@@ -24,6 +24,7 @@ import sys
 import os
 import json
 import requests
+import re
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -362,12 +363,12 @@ class ImportDriver(object):
             for edge in edge_list[0]:
                 index_1 = edge[0]
                 index_2 = edge[1]
-                if len(edge_list[1][edge]) == 1:
-                    weight = float(edge_list[1][edge][0])
-                else:
-                    weight = float(np.mean(edge_list[1][edge]))
+                all_weights = re.findall("[-+]?[.]?[\d]+(?:,\d\d\d)*[\.]?\d*(?:[eE][-+]?\d+)?",
+                                         edge_list[1][edge][0])
+                all_weights = [float(x) for x in all_weights]
+                weight = float(np.mean(all_weights))
                 g.add_edge(index_1, index_2, source=str(edge_list[0][edge]),
-                           weight=weight, all_weights=str(edge_list[1][edge]))
+                           weight=weight, all_weights=str(all_weights))
             # necessary for networkx indexing
             for item in tax_dict:
                 nx.set_node_attributes(g, tax_dict[item], item)
@@ -688,15 +689,18 @@ class ImportDriver(object):
                               "' RETURN p")).data()
                 if mode == 'weight' and len(hit) > 0:
                     # need to find the association that not only matches taxon, but also weight
+                    hit = list()
                     for node in hit:
                         matched_hit = None
                         database_weight = node['p'].nodes[1].get('weight')
-                        if np.sign(database_weight) == np.sign(network_weight):
+                        database_weight = re.findall("[-+]?[.]?[\d]+(?:,\d\d\d)*[\.]?\d*(?:[eE][-+]?\d+)?",
+                                                 database_weight)
+                        weight_list = [float(x) for x in database_weight]
+                        if np.sign(np.mean(weight_list)) == np.sign(network_weight):
                             matched_hit = node
                         else:
                             pass
                     if matched_hit:
-                        hit = list()
                         hit.append(matched_hit)
                 # first check if association is already present)
                 if len(hit) > 0:
@@ -728,7 +732,7 @@ class ImportDriver(object):
                     if mode == 'weight':
                         tx.run("CREATE (a:Association {name: $id}) "
                                "SET a.weight = $weight "
-                               "RETURN a", id=uid, weight=str(network_weight))
+                               "RETURN a", id=uid, weight=str([network_weight]))
                     else:
                         tx.run("CREATE (a:Association {name: $id}) "
                                "RETURN a", id=uid)

@@ -94,7 +94,7 @@ class NetDriver(object):
             with self._driver.session() as session:
                 union = session.read_transaction(self._get_union, networks)
                 logger.info("The union set operation for networks " + str(networks) +
-                            "has been added to "
+                            " has been added to "
                             "the database\nwith name " + union + ". ")
         except Exception:
             logger.error("Could not obtain graph union. ", exc_info=True)
@@ -116,7 +116,7 @@ class NetDriver(object):
             with self._driver.session() as session:
                 intersection = session.read_transaction(self._get_intersection, networks, weight=weight, n=n)
             logger.info("The intersection set operation for networks " + str(networks) +
-                        "has been added to "
+                        " has been added to "
                         "the database\nwith name " + intersection + ". ")
         except Exception:
             logger.error("Could not obtain graph intersection. ", exc_info=True)
@@ -136,7 +136,7 @@ class NetDriver(object):
             with self._driver.session() as session:
                 difference = session.read_transaction(self._get_difference, networks, weight=weight)
                 logger.info("The difference set operation for networks " + str(networks) +
-                            "has been added to "
+                            " has been added to "
                             "the database \nwith name " + difference + ". ")
         except Exception:
             logger.error("Could not obtain graph difference. ", exc_info=True)
